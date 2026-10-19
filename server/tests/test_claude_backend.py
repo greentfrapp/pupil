@@ -82,4 +82,6 @@ def test_options_isolate_the_agent(tmp_path: Path):
     assert plain.include_partial_messages  # translate() takes text only from stream deltas
 
     web = build_options(AgentConfig(system_prompt="p", web_search=True), tmp_path, None)
-    assert set(web.tools) == {"WebSearch", "WebFetch"} <= set(web.allowed_tools)
+    assert set(web.tools) == {"WebSearch", "WebFetch"}
+    # Under dontAsk, a tool that is available but not allowed is always denied.
+    assert {"WebSearch", "WebFetch"} <= set(web.allowed_tools)
