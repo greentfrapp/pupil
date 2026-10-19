@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref } from 'vue'
-import { createSession, deleteSession, sendMessage, type AgentEvent } from '../api/chat'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  getConversation,
+  NotFound,
+  releaseSession,
+  sendMessage,
+  startConversation,
+  type AgentEvent,
+  type TranscriptItem,
+} from '../api/chat'
 
 type Part =
   | { kind: 'text'; text: string }
@@ -16,7 +24,27 @@ const messages = ref<Message[]>([])
 const draft = ref('')
 const busy = ref(false)
 const log = ref<HTMLElement | null>(null)
-let sessionId: string | null = null
+let conversationId: string | null = null
+
+// Remembered per browser, so a reload carries on with the same conversation.
+const STORAGE_KEY = 'pupil.conversation'
+
+function remember(id: string | null) {
+  try {
+    if (id) localStorage.setItem(STORAGE_KEY, id)
+    else localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // Storage can be unavailable (e.g. private windows); the chat still works without it.
+  }
+}
+
+function remembered(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
 
 const toolStyle = {
   running: 'opacity-60',
@@ -55,8 +83,11 @@ async function send() {
   // Mutate through the reactive array so the view updates as events arrive.
   const reply = messages.value[messages.value.length - 1]
   try {
-    sessionId ??= await createSession()
-    await sendMessage(sessionId, text, (event) => {
+    if (!conversationId) {
+      conversationId = await startConversation()
+      remember(conversationId)
+    }
+    await sendMessage(conversationId, text, (event) => {
       apply(reply, event)
       scrollDown()
     })
@@ -67,12 +98,58 @@ async function send() {
   }
 }
 
+/** Rebuild the messages from a saved transcript, through the same `apply` as a live turn. */
+function replay(transcript: TranscriptItem[]): Message[] {
+  const restored: Message[] = []
+  for (const item of transcript) {
+    if (item.type === 'user_message') {
+      restored.push({ role: 'user', parts: [{ kind: 'text', text: item.text }] })
+      continue
+    }
+    let reply = restored[restored.length - 1]
+    if (reply?.role !== 'agent') {
+      reply = { role: 'agent', parts: [] }
+      restored.push(reply)
+    }
+    apply(reply, item)
+  }
+  return restored
+}
+
+async function restore(id: string) {
+  busy.value = true
+  try {
+    const conversation = await getConversation(id)
+    conversationId = id
+    messages.value = replay(conversation.transcript)
+    scrollDown()
+  } catch (e) {
+    if (e instanceof NotFound) remember(null)
+    else messages.value = [{ role: 'agent', parts: [], error: `Could not load the chat: ${e}` }]
+  } finally {
+    busy.value = false
+  }
+}
+
+function startOver() {
+  if (busy.value) return
+  if (conversationId) releaseSession(conversationId)
+  conversationId = null
+  remember(null)
+  messages.value = []
+}
+
 function scrollDown() {
   nextTick(() => log.value?.scrollTo({ top: log.value.scrollHeight }))
 }
 
+onMounted(() => {
+  const id = remembered()
+  if (id) restore(id)
+})
+
 onBeforeUnmount(() => {
-  if (sessionId) deleteSession(sessionId)
+  if (conversationId) releaseSession(conversationId)
 })
 </script>
 
@@ -116,6 +193,14 @@ onBeforeUnmount(() => {
         class="rounded-md bg-blue-600 px-4 py-1.5 text-white hover:bg-blue-700 disabled:opacity-50"
       >
         Send
+      </button>
+      <button
+        type="button"
+        :disabled="busy || !messages.length"
+        class="rounded-md border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+        @click="startOver"
+      >
+        New chat
       </button>
     </form>
   </section>

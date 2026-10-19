@@ -1,9 +1,8 @@
-"""Live agent sessions, held in memory for the life of the sidecar."""
+"""Live agent sessions, held in memory while in use, under ids the caller chooses."""
 
 from __future__ import annotations
 
 import asyncio
-import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
@@ -19,7 +18,9 @@ class SessionBusy(RuntimeError):
 
 
 @dataclass
-class _Entry:
+class Entry:
+    """A live session, and the lock held while a turn runs on it."""
+
     session: AgentSession
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -27,28 +28,30 @@ class _Entry:
 class SessionStore:
     def __init__(self, backend: AgentBackend) -> None:
         self.backend = backend
-        self._entries: dict[str, _Entry] = {}
+        self._entries: dict[str, Entry] = {}
 
-    async def open(self, config: AgentConfig) -> str:
-        session = await self.backend.open_session(config)
-        session_id = uuid.uuid4().hex
-        self._entries[session_id] = _Entry(session)
-        return session_id
+    def is_open(self, session_id: str) -> bool:
+        return session_id in self._entries
 
-    def _get(self, session_id: str) -> _Entry:
+    async def open(self, session_id: str, config: AgentConfig, resume: str | None = None) -> None:
+        if session_id in self._entries:
+            raise ValueError(f"session {session_id!r} is already open")
+        self._entries[session_id] = Entry(await self.backend.open_session(config, resume))
+
+    def _get(self, session_id: str) -> Entry:
         try:
             return self._entries[session_id]
         except KeyError:
             raise SessionNotFound(session_id) from None
 
-    def claim(self, session_id: str) -> _Entry:
+    def claim(self, session_id: str) -> Entry:
         """Check the session exists and is idle, before a response is committed to."""
         entry = self._get(session_id)
         if entry.lock.locked():
             raise SessionBusy(session_id)
         return entry
 
-    async def send(self, entry: _Entry, text: str) -> AsyncIterator[AgentEvent]:
+    async def send(self, entry: Entry, text: str) -> AsyncIterator[AgentEvent]:
         """Run one turn. Backend failures end the stream with an error event, not an exception."""
         async with entry.lock:
             try:

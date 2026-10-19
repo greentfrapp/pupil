@@ -84,9 +84,13 @@ class FakeBackend:
     def __init__(self, script: Sequence[Turn] = ()) -> None:
         self._script = list(script)
         self.sessions: list[FakeSession] = []
+        self.resumed: list[str] = []
+        """The resume tokens sessions were opened with, in order."""
 
     async def open_session(self, config: AgentConfig, resume: str | None = None) -> FakeSession:
         check_capabilities(self, config)
+        if resume:
+            self.resumed.append(resume)
         # Sessions share the backend's script, so a test can script a whole conversation.
         session = FakeSession(config, self._script, resume or uuid.uuid4().hex)
         self.sessions.append(session)

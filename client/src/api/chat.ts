@@ -6,19 +6,39 @@ export type AgentEvent =
   | { type: 'turn_complete'; cost_usd: number | null; usage: Record<string, unknown> | null }
   | { type: 'error'; message: string }
 
+// Mirrors pupil_server.conversations.transcript.TranscriptItem: agent events as they were
+// streamed, with each run of text merged into one text_delta.
+export type TranscriptItem = { type: 'user_message'; text: string } | AgentEvent
+
+export interface Conversation {
+  conversation_id: string
+  created_at: string
+  transcript: TranscriptItem[]
+}
+
+export class NotFound extends Error {}
+
 async function failure(res: Response): Promise<Error> {
   const body = await res.json().catch(() => null)
-  return new Error(body?.detail ?? `HTTP ${res.status}`)
+  const message = body?.detail ?? `HTTP ${res.status}`
+  return res.status === 404 ? new NotFound(message) : new Error(message)
 }
 
-export async function createSession(): Promise<string> {
-  const res = await fetch('/api/chat/sessions', { method: 'POST' })
+export async function startConversation(): Promise<string> {
+  const res = await fetch('/api/conversations', { method: 'POST' })
   if (!res.ok) throw await failure(res)
-  return (await res.json()).session_id
+  return (await res.json()).conversation_id
 }
 
-export async function deleteSession(id: string): Promise<void> {
-  await fetch(`/api/chat/sessions/${id}`, { method: 'DELETE' })
+export async function getConversation(id: string): Promise<Conversation> {
+  const res = await fetch(`/api/conversations/${id}`)
+  if (!res.ok) throw await failure(res)
+  return res.json()
+}
+
+/** Let the server close the live agent session; the conversation can carry on later. */
+export async function releaseSession(id: string): Promise<void> {
+  await fetch(`/api/conversations/${id}/session`, { method: 'DELETE', keepalive: true })
 }
 
 /** Send one message and call `onEvent` for each event as it streams in. */
@@ -28,7 +48,7 @@ export async function sendMessage(
   onEvent: (event: AgentEvent) => void,
 ): Promise<void> {
   // EventSource only does GET, so read the SSE stream from fetch directly.
-  const res = await fetch(`/api/chat/sessions/${id}/messages`, {
+  const res = await fetch(`/api/conversations/${id}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),

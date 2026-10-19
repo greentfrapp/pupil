@@ -17,9 +17,12 @@ from fastapi import FastAPI
 
 from pupil_server import __version__
 from pupil_server.agents import AgentBackend, make_backend
+from pupil_server.agents.demo import demo_config
 from pupil_server.agents.sessions import SessionStore
-from pupil_server.api import chat
+from pupil_server.api import conversations
+from pupil_server.conversations.service import Conversations
 from pupil_server.db import Database, DatabaseTooNew
+from pupil_server.db.conversations import ConversationRepo
 from pupil_server.lock import DatabaseInUse, DatabaseLock
 from pupil_server.loop import LoopCannotSpawn, require_subprocess_support
 from pupil_server.settings import Settings
@@ -63,6 +66,9 @@ def create_app(
                 log.error("%s", exc)
                 raise
             app.state.db = db
+            app.state.conversations = Conversations(
+                agents, ConversationRepo(db), lambda learner_id: demo_config(db, learner_id)
+            )
             try:
                 yield
             finally:
@@ -79,7 +85,7 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__, "mode": config.mode}
 
-    app.include_router(chat.router)
+    app.include_router(conversations.router)
     return app
 
 
