@@ -157,21 +157,5 @@ class ClaudeBackend:
         check_capabilities(self, config)
         self._workdir.mkdir(parents=True, exist_ok=True)
         client = ClaudeSDKClient(build_options(config, self._workdir, resume))
-        try:
-            await client.connect()
-        except Exception as exc:
-            if _caused_by(exc, NotImplementedError):
-                raise RuntimeError(
-                    "this event loop cannot start subprocesses, which the Claude backend needs; "
-                    "serve with `uvicorn --loop pupil_server.loop:loop_factory`"
-                ) from exc
-            raise
+        await client.connect()
         return ClaudeSession(client, resume)
-
-
-def _caused_by(exc: BaseException | None, kind: type[BaseException]) -> bool:
-    while exc is not None:
-        if isinstance(exc, kind):
-            return True
-        exc = exc.__cause__ or exc.__context__
-    return False

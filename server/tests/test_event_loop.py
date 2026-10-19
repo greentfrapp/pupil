@@ -1,29 +1,33 @@
-"""The Claude backend needs a loop that can start subprocesses (not billed: no turn is sent)."""
+"""The server must run on an event loop that can start subprocesses."""
 
 import asyncio
 import sys
+from pathlib import Path
 
 import pytest
 
-from pupil_server.agents import AgentConfig
-from pupil_server.agents.claude import ClaudeBackend
-from pupil_server.loop import loop_factory
-
-windows_only = pytest.mark.skipif(
-    sys.platform != "win32", reason="Selector loop limit is Windows-only"
-)
+from pupil_server.agents.fake import FakeBackend
+from pupil_server.app import create_app
+from pupil_server.loop import LoopCannotSpawn, loop_factory
+from pupil_server.settings import Settings
 
 
-async def _open_and_close(workdir) -> None:
-    session = await ClaudeBackend(workdir=workdir).open_session(AgentConfig(system_prompt="t"))
-    await session.close()
+async def _run_subprocess() -> int:
+    proc = await asyncio.create_subprocess_exec(sys.executable, "-c", "")
+    return await proc.wait()
 
 
-@windows_only
-def test_selector_loop_gives_a_clear_error(tmp_path):
-    with pytest.raises(RuntimeError, match="cannot start subprocesses"):
-        asyncio.run(_open_and_close(tmp_path), loop_factory=asyncio.SelectorEventLoop)
+def test_loop_factory_can_run_subprocesses():
+    assert asyncio.run(_run_subprocess(), loop_factory=loop_factory) == 0
 
 
-def test_loop_factory_can_start_the_claude_cli(tmp_path):
-    asyncio.run(_open_and_close(tmp_path), loop_factory=loop_factory)
+@pytest.mark.skipif(sys.platform != "win32", reason="Selector loop limit is Windows-only")
+def test_startup_refuses_a_loop_that_cannot_spawn(tmp_path: Path):
+    app = create_app(Settings(), db_path=tmp_path / "t.db", agent_backend=FakeBackend())
+
+    async def start() -> None:
+        async with app.router.lifespan_context(app):
+            pass
+
+    with pytest.raises(LoopCannotSpawn, match="pupil_server.loop:loop_factory"):
+        asyncio.run(start(), loop_factory=asyncio.SelectorEventLoop)

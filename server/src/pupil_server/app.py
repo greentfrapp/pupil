@@ -21,6 +21,7 @@ from pupil_server.agents import AgentBackend, make_backend
 from pupil_server.agents.sessions import SessionStore
 from pupil_server.api import chat
 from pupil_server.lock import DatabaseInUse, DatabaseLock
+from pupil_server.loop import LoopCannotSpawn, require_subprocess_support
 from pupil_server.settings import Settings
 from pupil_server.settings import settings as default_settings
 
@@ -60,6 +61,11 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            require_subprocess_support()
+        except LoopCannotSpawn as exc:
+            log.error("%s", exc)
+            raise
         database = db_path or config.db_path
         lock = DatabaseLock(database)
         try:
