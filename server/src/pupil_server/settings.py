@@ -9,13 +9,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_WORKSPACE_NAME = "Default"
 
 
-def _pupil_home() -> Path:
+def pupil_home() -> Path:
     return Path.home() / "Pupil"
 
 
 def _default_db_path() -> Path:
     """Where the event log lives by default."""
-    return _pupil_home() / "pupil.db"
+    return pupil_home() / "pupil.db"
 
 
 class Settings(BaseSettings):
