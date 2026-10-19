@@ -31,7 +31,7 @@ async def create_session(request: Request) -> SessionCreated:
     try:
         session_id = await _store(request).open(demo_config())
     except Exception as exc:
-        raise HTTPException(502, f"could not start agent: {exc}") from exc
+        raise HTTPException(502, f"could not start agent: {exc or type(exc).__name__}") from exc
     return SessionCreated(session_id=session_id)
 
 
