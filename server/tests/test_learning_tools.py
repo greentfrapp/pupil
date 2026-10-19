@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -5,7 +6,8 @@ import pytest
 
 from pupil_server.agents import ToolResult
 from pupil_server.db import LOCAL_LEARNER, Database
-from pupil_server.db.learning import EvidenceRepo, QuizRepo, SyllabusRepo
+from pupil_server.db.learning import AttemptRepo, QuizRepo, SyllabusRepo
+from pupil_server.learning.quiz import QuizAttempt
 from pupil_server.learning.tools import learning_tools
 
 
@@ -65,7 +67,7 @@ def objective_id(syllabus: dict, unit_id: str) -> str:
     return unit["objectives"][0]["id"]
 
 
-async def practise(call, syllabus: dict, unit_id: str) -> None:
+async def practise(call, db: Database, syllabus: dict, unit_id: str) -> None:
     """Give the learner evidence on a unit's objective."""
     quiz = await call(
         "create_quiz",
@@ -74,7 +76,10 @@ async def practise(call, syllabus: dict, unit_id: str) -> None:
         syllabus_id=syllabus["id"],
         questions=tagged(objective_id(syllabus, unit_id)),
     )
-    await call("submit_quiz_answers", quiz_id=quiz.output["quiz_id"], responses={})
+    attempt = QuizAttempt(
+        id="att_1", quiz_id=quiz.output["quiz_id"], responses={}, submitted_at=datetime.now(UTC)
+    )
+    await AttemptRepo(db).submit(LOCAL_LEARNER, attempt)
 
 
 async def revise(call, syllabus: dict, units: list[dict], **extra: Any) -> ToolResult:
@@ -149,9 +154,9 @@ async def test_revise_reports_added_reworded_and_removed_objectives(call):
     assert result.output["warnings"] == []  # no progress on either yet
 
 
-async def test_rewording_an_objective_with_progress_warns(call):
+async def test_rewording_an_objective_with_progress_warns(call, db: Database):
     syllabus = await create(call)
-    await practise(call, syllabus, "basics")
+    await practise(call, db, syllabus, "basics")
     basics, loops = syllabus["units"]
     reworded = {**basics, "objectives": [{**basics["objectives"][0], "text": "Use variables"}]}
 
@@ -164,7 +169,7 @@ async def test_rewording_an_objective_with_progress_warns(call):
 
 async def test_dropping_an_objective_with_progress_must_be_retired(call, db: Database):
     syllabus = await create(call)
-    await practise(call, syllabus, "loops")
+    await practise(call, db, syllabus, "loops")
     basics, _ = syllabus["units"]
     loops_id = objective_id(syllabus, "loops")
 
@@ -243,45 +248,3 @@ async def test_create_quiz_assigns_the_id_and_checks_tags(call, db: Database):
     )
     assert bad.is_error
     assert "objective ids not in syllabus" in bad.output
-
-
-async def test_submit_quiz_answers_grades_and_records_evidence(call, db: Database):
-    syllabus = await create(call)
-    quiz_id = (
-        await call(
-            "create_quiz",
-            title="Checkpoint",
-            purpose="checkpoint",
-            syllabus_id=syllabus["id"],
-            questions=tagged(objective_id(syllabus, "basics")),
-        )
-    ).output["quiz_id"]
-
-    result = await call(
-        "submit_quiz_answers",
-        quiz_id=quiz_id,
-        responses={
-            "q1": {"kind": "choice", "option_ids": ["a"]},
-            "q2": {"kind": "number", "value": 4},
-        },
-    )
-    assert result.output["attempt_id"].startswith("att_")
-    assert result.output["correct"] == 1
-    assert result.output["total"] == 2
-    assert result.output["results"] == [
-        {"question_id": "q1", "correct": True},
-        {"question_id": "q2", "correct": False},
-    ]
-    evidence = await EvidenceRepo(db).for_syllabus(LOCAL_LEARNER, syllabus["id"])
-    assert {e.attempt_id for e in evidence} == {result.output["attempt_id"]}
-
-
-async def test_an_answer_of_the_wrong_kind_comes_back_as_an_error(call):
-    quiz_id = (
-        await call("create_quiz", title="Placement", purpose="placement", questions=QUESTIONS)
-    ).output["quiz_id"]
-    result = await call(
-        "submit_quiz_answers", quiz_id=quiz_id, responses={"q2": {"kind": "text", "text": "3"}}
-    )
-    assert result.is_error
-    assert "needs a NumberResponse, got TextResponse" in result.output

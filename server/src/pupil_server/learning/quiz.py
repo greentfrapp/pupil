@@ -224,3 +224,73 @@ def grade_attempt(quiz: Quiz, attempt: QuizAttempt) -> list[QuestionResult]:
         )
         for q in quiz.questions
     ]
+
+
+# The learner's view: what a quiz screen may show before the quiz is answered. Fields are
+# listed rather than copied, so an answer field added to a question later stays hidden.
+
+
+class QuestionView(BaseModel):
+    kind: str
+    id: str
+    prompt: str
+    options: list[Option] | None = None
+    """For multiple_choice."""
+    multiple: bool | None = None
+    """For multiple_choice: pick every correct option, not just one."""
+    unit: str | None = None
+    """For numeric."""
+
+
+class QuizView(BaseModel):
+    id: str
+    title: str
+    purpose: Literal["placement", "checkpoint"]
+    questions: list[QuestionView]
+
+
+def learner_view(quiz: Quiz) -> QuizView:
+    """The quiz without its answers or explanations."""
+    questions = []
+    for q in quiz.questions:
+        view = QuestionView(kind=q.kind, id=q.id, prompt=q.prompt)
+        if isinstance(q, MultipleChoice):
+            view.options, view.multiple = q.options, q.multiple
+        elif isinstance(q, Numeric):
+            view.unit = q.unit
+        questions.append(view)
+    return QuizView(id=quiz.id, title=quiz.title, purpose=quiz.purpose, questions=questions)
+
+
+def describe_attempt(quiz: Quiz, attempt: QuizAttempt, results: list[QuestionResult]) -> str:
+    """The results in words, for the agent: what was right, and what the learner answered."""
+    questions = {q.id: q for q in quiz.questions}
+    right = sum(r.correct for r in results)
+    lines = [
+        f"The learner finished the quiz {quiz.title!r} ({quiz.id}): {right} of {len(results)} right."
+    ]
+    for r in results:
+        response = attempt.responses.get(r.question_id)
+        if r.correct:
+            lines.append(f"- {r.question_id}: right")
+        elif response is None:
+            lines.append(f"- {r.question_id}: wrong, skipped")
+        else:
+            given = _describe_response(questions[r.question_id], response)
+            lines.append(f"- {r.question_id}: wrong, answered {given}")
+    return "\n".join(lines)
+
+
+def _describe_response(question: QuestionBase, response: BaseModel) -> str:
+    match response:
+        case ChoiceResponse(option_ids=ids) if isinstance(question, MultipleChoice):
+            texts = {o.id: o.text for o in question.options}
+            return ", ".join(repr(texts.get(i, i)) for i in ids) or "nothing"
+        case BoolResponse(value=value):
+            return "true" if value else "false"
+        case NumberResponse(value=value):
+            unit = getattr(question, "unit", None)
+            return f"{value:g} {unit}" if unit else f"{value:g}"
+        case TextResponse(text=text):
+            return repr(text)
+    return repr(response)

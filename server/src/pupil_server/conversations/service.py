@@ -13,9 +13,9 @@ from collections.abc import AsyncIterator, Callable
 
 import anyio
 
-from pupil_server.agents.base import AgentConfig, AgentEvent, TextDelta
+from pupil_server.agents.base import AgentConfig, AgentEvent, TextDelta, ToolCall
 from pupil_server.agents.sessions import Entry, SessionStore
-from pupil_server.conversations.transcript import Conversation, TranscriptItem, UserMessage
+from pupil_server.conversations.transcript import Conversation, Prompt, TranscriptItem
 from pupil_server.db.conversations import ConversationRepo
 
 log = logging.getLogger(__name__)
@@ -75,10 +75,15 @@ class Conversations:
             await self._sessions.open(conversation_id, config)
 
     async def send(
-        self, learner_id: str, conversation_id: str, entry: Entry, text: str
+        self, learner_id: str, conversation_id: str, entry: Entry, prompt: Prompt
     ) -> AsyncIterator[AgentEvent]:
-        """Run one turn, saving it to the transcript as it goes."""
-        await self._repo.append(learner_id, conversation_id, UserMessage(text=text))
+        """Run one turn, saving it to the transcript as it goes.
+
+        Arguments of tools that hide their input (a quiz's answer key) are left out of both
+        the stream and the transcript.
+        """
+        hidden = {t.name for t in self._config(learner_id).tools if t.hide_input}
+        await self._repo.append(learner_id, conversation_id, prompt)
         text_run: list[str] = []
 
         async def save_text() -> None:
@@ -88,7 +93,9 @@ class Conversations:
                 await self._repo.append(learner_id, conversation_id, merged)
 
         try:
-            async for event in self._sessions.send(entry, text):
+            async for event in self._sessions.send(entry, prompt.text):
+                if isinstance(event, ToolCall) and event.name in hidden:
+                    event = event.model_copy(update={"input": {}})
                 if isinstance(event, TextDelta):
                     text_run.append(event.text)
                 else:

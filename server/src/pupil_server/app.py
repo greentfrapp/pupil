@@ -19,7 +19,7 @@ from pupil_server import __version__
 from pupil_server.agents import AgentBackend, make_backend
 from pupil_server.agents.demo import demo_config
 from pupil_server.agents.sessions import SessionStore
-from pupil_server.api import conversations
+from pupil_server.api import conversations, quizzes
 from pupil_server.conversations.service import Conversations
 from pupil_server.db import Database, DatabaseTooNew
 from pupil_server.db.conversations import ConversationRepo
@@ -86,6 +86,7 @@ def create_app(
         return {"status": "ok", "version": __version__, "mode": config.mode}
 
     app.include_router(conversations.router)
+    app.include_router(quizzes.router)
     return app
 
 

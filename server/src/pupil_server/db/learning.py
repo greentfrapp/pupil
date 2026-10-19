@@ -183,6 +183,20 @@ class AttemptRepo:
 
         return await self._db.run(work)
 
+    async def for_quiz(self, learner_id: str, quiz_id: str) -> list[QuizAttempt]:
+        """The quiz's attempts, oldest first."""
+
+        def work(conn: sqlite3.Connection) -> list[QuizAttempt]:
+            _quiz(conn, learner_id, quiz_id)
+            rows = conn.execute(
+                "SELECT body FROM attempts WHERE learner_id = ? AND quiz_id = ? "
+                "ORDER BY submitted_at, rowid",
+                (learner_id, quiz_id),
+            )
+            return [QuizAttempt.model_validate_json(r["body"]) for r in rows]
+
+        return await self._db.run(work)
+
 
 class EvidenceRepo:
     def __init__(self, db: Database) -> None:
