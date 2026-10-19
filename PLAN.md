@@ -18,6 +18,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 | 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
 | 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged) |
 | 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Planned |
+| 5 | `quiz-ui` | Quiz-taking interface: quizzes served without answers, the answer key kept out of the chat stream, answers submitted by the UI, and results sent back to the agent | 3, 4 | Planned |
 
 ## Design: progress is kept separate from the syllabus
 
@@ -165,14 +166,35 @@ The work is split into four branches. Each can be merged on its own and builds o
 - A conversation that exists in the database but not in memory (after a restart) is reopened
   with its stored resume token.
 
+### Step 5: quiz UI
+
+Quizzes are taken in their own interface, not in the chat. The agent writes the whole quiz in
+one `create_quiz` call, tells the learner it is ready and ends its turn. The UI then shows the
+questions one at a time. (The tutor's prompt already asks for this.)
+
+- **Quizzes without answers:** `GET /api/quizzes/{id}` returns the learner's view of a quiz,
+  without `correct`, `answer`, `accepted` or `explanation` fields. Explanations come back with
+  the results.
+- **Keeping the answer key out of the chat stream:** today every `tool_call` event carries the
+  tool's full input, so `create_quiz` would send the answers to the browser. Its input is
+  stripped from the stream, and the client opens the quiz from the `quiz_id` in the tool result.
+- **Answers come from the UI:** `POST /api/quizzes/{id}/attempts` grades and stores them with
+  `AttemptRepo.submit`, and returns each question's result and explanation. The agent never
+  relays answers, so it can't alter them. `submit_quiz_answers` stays for chat-only use, or is
+  dropped.
+- **Results go back to the agent:** when the learner finishes, the app sends the results into
+  the conversation as the next message (e.g. "Quiz finished: 3 of 5 right; q2 and q4 wrong"), so
+  the agent can explain mistakes and revise the syllabus. This needs messages the learner didn't
+  type, which builds on step 4's transcripts.
+- **Client:** a quiz component with one screen per question type, and TypeScript types for the
+  learner's view of a quiz and for results.
+
 ## Other gaps, not yet scheduled
 
-- **Hiding the answer key:** a view of a quiz without its answers, needed before a quiz-taking
-  UI sends quizzes to the browser.
 - **Evolving stored JSON:** stored bodies must stay readable as the models change. Model changes
   must be backward-compatible, or a migration must rewrite the stored JSON.
 - **Learner data:** export and deletion, since this is a consumer app holding learner
   transcripts. Also backups of `~/Pupil/pupil.db`.
 - **Remote mode:** authentication, and mapping requests to a `learner_id`.
-- **UI:** a transcript view, a quiz-taking UI, a syllabus view, and TypeScript types for these
-  models.
+- **UI:** a transcript view, a syllabus view, and TypeScript types for these models. The
+  quiz-taking UI is step 5.

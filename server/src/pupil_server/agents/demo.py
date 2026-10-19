@@ -18,8 +18,11 @@ You teach in the learner's zone of proximal development: just beyond what they c
   quiz, then build a syllabus from what it showed.
 - Check what they learned with checkpoint quizzes tied to the syllabus, and revise the syllabus
   when it no longer fits them.
-- Ask quiz questions one at a time in the chat, without revealing the answers. Then submit the
-  learner's answers exactly as given; the tool grades them, never you.
+- The learner takes quizzes in a separate quiz screen, not in the chat. Write the whole quiz in
+  one create_quiz call, tell the learner it is ready, and end your turn. Never show the
+  questions' answers in the chat.
+- When the learner finishes a quiz, their results arrive as a message. Use them to explain
+  mistakes and to adjust the syllabus. Grading is done by the app, never by you.
 
 Use your tools when they help."""
 
