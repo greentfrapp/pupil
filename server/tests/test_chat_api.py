@@ -1,9 +1,12 @@
+import asyncio
 import json
+import threading
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from pupil_server.agents import TextDelta, TurnComplete
 from pupil_server.agents.fake import Call, FakeBackend, Say
 from pupil_server.app import create_app
 from pupil_server.settings import Settings
@@ -27,7 +30,7 @@ def client(tmp_path: Path, backend: FakeBackend):
         yield c
 
 
-def test_chat_round_trip_streams_events(client: TestClient):
+def test_turn_is_sent_as_sse_events(client: TestClient):
     created = client.post("/api/chat/sessions")
     assert created.status_code == 201
     session_id = created.json()["session_id"]
@@ -38,9 +41,36 @@ def test_chat_round_trip_streams_events(client: TestClient):
 
     events = _events(res.text)
     types = [e["type"] for e in events]
-    assert types[-1] == "turn_complete"
+    assert types[0] == "text_delta" and types[-1] == "turn_complete"
+    assert types.index("tool_call") < types.index("tool_result")
+    call = next(e for e in events if e["type"] == "tool_call")
     result = next(e for e in events if e["type"] == "tool_result")
-    assert not result["is_error"] and "T" in result["output"]  # an ISO timestamp
+    assert result["id"] == call["id"] and not result["is_error"]
+
+
+def test_events_arrive_before_the_turn_ends(client: TestClient, backend: FakeBackend):
+    session_id = client.post("/api/chat/sessions").json()["session_id"]
+    gate = threading.Event()
+    finished = threading.Event()
+
+    async def paused_turn(text: str):
+        yield TextDelta(text="first")
+        # Bounded, so a buffering endpoint fails the assertion below instead of hanging.
+        await asyncio.to_thread(gate.wait, 5)
+        finished.set()
+        yield TurnComplete()
+
+    backend.sessions[0].send = paused_turn
+    url = f"/api/chat/sessions/{session_id}/messages"
+    with client.stream("POST", url, json={"text": "x"}) as res:
+        lines = (line for line in res.iter_lines() if line.startswith("data: "))
+        first = json.loads(next(lines)[len("data: ") :])
+        assert first == {"type": "text_delta", "text": "first"}
+        assert not finished.is_set(), "first event was held back until the turn ended"
+
+        gate.set()
+        last = json.loads(list(lines)[-1][len("data: ") :])
+    assert last["type"] == "turn_complete"
 
 
 def test_unknown_session_is_404(client: TestClient):
