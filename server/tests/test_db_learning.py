@@ -163,7 +163,7 @@ async def test_another_learners_records_are_not_found(db: Database):
 # Quizzes
 
 
-async def test_quiz_round_trip(db: Database):
+async def test_quizzes_with_and_without_a_syllabus_are_stored(db: Database):
     await SyllabusRepo(db).create(ME, syllabus())
     repo = QuizRepo(db)
     await repo.create(ME, quiz())
