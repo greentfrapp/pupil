@@ -31,27 +31,23 @@ onMounted(ping)
 </script>
 
 <template>
-  <main>
-    <h1>Hello, Pupil</h1>
-    <p v-if="loading">Pinging sidecar…</p>
-    <p v-else-if="health">
-      Sidecar: <strong>{{ health.status }}</strong> (v{{ health.version }}, {{ health.mode }})
-    </p>
-    <p v-else class="error">Sidecar unreachable: {{ error }}</p>
-    <button :disabled="loading" @click="ping">Ping again</button>
-    <h2>Chat</h2>
+  <main class="mx-auto my-16 max-w-2xl space-y-4 px-4 font-sans text-gray-900">
+    <h1 class="text-3xl font-bold">Hello, Pupil</h1>
+    <div class="flex items-center gap-3">
+      <p v-if="loading" class="text-gray-500">Pinging sidecar…</p>
+      <p v-else-if="health">
+        Sidecar: <strong>{{ health.status }}</strong> (v{{ health.version }}, {{ health.mode }})
+      </p>
+      <p v-else class="text-red-600">Sidecar unreachable: {{ error }}</p>
+      <button
+        :disabled="loading"
+        class="rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+        @click="ping"
+      >
+        Ping again
+      </button>
+    </div>
+    <h2 class="pt-4 text-xl font-semibold">Chat</h2>
     <ChatBox />
   </main>
 </template>
-
-<style scoped>
-main {
-  font-family: system-ui, sans-serif;
-  max-width: 40rem;
-  margin: 4rem auto;
-  padding: 0 1rem;
-}
-.error {
-  color: #c0392b;
-}
-</style>

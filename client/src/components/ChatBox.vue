@@ -18,6 +18,12 @@ const busy = ref(false)
 const log = ref<HTMLElement | null>(null)
 let sessionId: string | null = null
 
+const toolStyle = {
+  running: 'opacity-60',
+  ok: '',
+  error: 'text-red-600',
+} satisfies Record<Extract<Part, { kind: 'tool' }>['status'], string>
+
 function apply(message: Message, event: AgentEvent) {
   const last = message.parts[message.parts.length - 1]
   switch (event.type) {
@@ -71,83 +77,46 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="chat">
-    <div ref="log" class="log">
-      <p v-if="!messages.length" class="hint">Say hello to your tutor.</p>
-      <div v-for="(m, i) in messages" :key="i" :class="['msg', m.role]">
+  <section class="flex h-96 flex-col rounded-lg border border-gray-300">
+    <div ref="log" class="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
+      <p v-if="!messages.length" class="text-gray-500">Say hello to your tutor.</p>
+      <div
+        v-for="(m, i) in messages"
+        :key="i"
+        :class="[
+          'max-w-[85%] rounded-lg px-3 py-2 leading-snug whitespace-pre-wrap',
+          m.role === 'user' ? 'self-end bg-blue-50' : 'self-start bg-gray-100',
+        ]"
+      >
         <template v-for="(p, j) in m.parts" :key="j">
           <span v-if="p.kind === 'text'">{{ p.text }}</span>
-          <span v-else :class="['tool', p.status]">⚙ {{ p.name }}</span>
+          <span
+            v-else
+            :class="[
+              'mx-1 my-0.5 inline-block rounded-full border border-gray-300 bg-white px-1.5 text-xs',
+              toolStyle[p.status],
+            ]"
+          >
+            ⚙ {{ p.name }}
+          </span>
         </template>
-        <span v-if="m.role === 'agent' && !m.parts.length && !m.error" class="hint">…</span>
-        <p v-if="m.error" class="error">{{ m.error }}</p>
+        <span v-if="m.role === 'agent' && !m.parts.length && !m.error" class="text-gray-500">…</span>
+        <p v-if="m.error" class="text-red-600">{{ m.error }}</p>
       </div>
     </div>
-    <form @submit.prevent="send">
-      <input v-model="draft" :disabled="busy" placeholder="Ask something…" />
-      <button :disabled="busy || !draft.trim()">Send</button>
+    <form class="flex gap-2 border-t border-gray-300 p-2" @submit.prevent="send">
+      <input
+        v-model="draft"
+        :disabled="busy"
+        placeholder="Ask something…"
+        class="flex-1 rounded-md border border-gray-300 px-2 py-1.5 focus:border-blue-500 focus:outline-none disabled:bg-gray-50"
+      />
+      <button
+        :disabled="busy || !draft.trim()"
+        class="rounded-md bg-blue-600 px-4 py-1.5 text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        Send
+      </button>
     </form>
   </section>
 </template>
-
-<style scoped>
-.chat {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  height: 24rem;
-}
-.log {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.msg {
-  max-width: 85%;
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  white-space: pre-wrap;
-  line-height: 1.4;
-}
-.msg.user {
-  align-self: flex-end;
-  background: #e8f0fe;
-}
-.msg.agent {
-  align-self: flex-start;
-  background: #f3f3f3;
-}
-.tool {
-  display: inline-block;
-  margin: 0.15rem 0.25rem;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  font-size: 0.8em;
-  background: #fff;
-  border: 1px solid #ccc;
-}
-.tool.running {
-  opacity: 0.6;
-}
-.tool.error,
-.error {
-  color: #c0392b;
-}
-.hint {
-  color: #888;
-}
-form {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-top: 1px solid #ddd;
-}
-input {
-  flex: 1;
-  padding: 0.4rem;
-}
-</style>
