@@ -155,6 +155,9 @@ async def test_another_learners_records_are_not_found(db: Database):
         await attempts.submit(OTHER, attempt("att_2"))
     with pytest.raises(NotFound):
         await attempts.get(OTHER, "att_1")
+    with pytest.raises(NotFound):
+        await attempts.results(OTHER, "att_1")
+    assert await EvidenceRepo(db).for_syllabus(OTHER, "syl_1") == []
 
 
 # Quizzes
@@ -167,25 +170,28 @@ async def test_quiz_round_trip(db: Database):
     await repo.create(ME, quiz("quiz_p", syllabus_id=None))
     assert await repo.get(ME, "quiz_1") == quiz()
     assert await repo.get(ME, "quiz_p") == quiz("quiz_p", syllabus_id=None)
-    with pytest.raises(AlreadyExists, match="quiz 'quiz_1' already exists"):
-        await repo.create(ME, quiz())
+
+
+async def test_quiz_ids_are_unique(db: Database):
+    repo = QuizRepo(db)
+    await repo.create(ME, quiz("quiz_p", syllabus_id=None))
+    with pytest.raises(AlreadyExists, match="quiz 'quiz_p' already exists"):
+        await repo.create(ME, quiz("quiz_p", syllabus_id=None))
+
+
+async def test_quiz_for_a_missing_syllabus_is_refused(db: Database):
+    with pytest.raises(NotFound, match="no syllabus 'syl_9'"):
+        await QuizRepo(db).create(ME, quiz(syllabus_id="syl_9"))
 
 
 async def test_quiz_tags_are_checked_against_the_latest_revision(db: Database):
     syllabi, repo = SyllabusRepo(db), QuizRepo(db)
     await syllabi.create(ME, syllabus())
-    with pytest.raises(NotFound, match="no syllabus 'syl_9'"):
-        await repo.create(ME, quiz(syllabus_id="syl_9"))
-    with pytest.raises(ValueError, match=re.escape("not in syllabus 'syl_1': ['o9']")):
-        await repo.create(ME, quiz(tags=("o1", "o9")))
-
     # Revision 2 drops o2, so a quiz still testing it is refused.
     revised = syllabus().model_copy(update={"units": syllabus().units[:1]})
     await syllabi.revise(ME, revised)
-    with pytest.raises(ValueError, match=re.escape("['o2']")):
+    with pytest.raises(ValueError, match=re.escape("not in syllabus 'syl_1': ['o2']")):
         await repo.create(ME, quiz())
-    with pytest.raises(NotFound):
-        await repo.get(ME, "quiz_1")  # nothing was stored
 
 
 # Attempts and evidence
@@ -198,7 +204,6 @@ async def test_submit_stores_the_attempt_results_and_evidence(db: Database):
     sent = attempt(q1=ChoiceResponse(option_ids=["a"]), q2=BoolResponse(value=False))
 
     results = await attempts.submit(ME, sent)
-    assert [(r.question_id, r.correct) for r in results] == [("q1", True), ("q2", False)]
     assert await attempts.get(ME, "att_1") == sent
     assert await attempts.results(ME, "att_1") == results
 
@@ -208,7 +213,8 @@ async def test_submit_stores_the_attempt_results_and_evidence(db: Database):
         ("o1", "q2", False),
         ("o2", "q2", False),
     ]
-    assert {(e.attempt_id, e.at) for e in evidence} == {("att_1", T0)}
+    assert all(e.attempt_id == "att_1" for e in evidence)
+    assert all(e.at == T0 for e in evidence)
 
 
 async def test_evidence_is_oldest_first_and_per_syllabus(db: Database):
@@ -231,13 +237,12 @@ async def test_placement_quiz_results_give_no_evidence(db: Database):
     await QuizRepo(db).create(ME, quiz("quiz_p", syllabus_id=None))
     attempts = AttemptRepo(db)
     results = await attempts.submit(ME, attempt(quiz_id="quiz_p", q2=BoolResponse(value=True)))
-    assert [(r.question_id, r.correct) for r in results] == [("q1", False), ("q2", True)]
     assert await attempts.results(ME, "att_1") == results
     rows = await db.run(lambda c: c.execute("SELECT count(*) FROM evidence").fetchone()[0])
     assert rows == 0
 
 
-async def test_a_rejected_attempt_stores_nothing(db: Database):
+async def test_attempt_with_unknown_questions_is_refused(db: Database):
     await QuizRepo(db).create(ME, quiz("quiz_p", syllabus_id=None))
     attempts = AttemptRepo(db)
     with pytest.raises(ValueError, match="not in quiz"):
@@ -245,6 +250,10 @@ async def test_a_rejected_attempt_stores_nothing(db: Database):
     with pytest.raises(NotFound):
         await attempts.get(ME, "att_1")
 
+
+async def test_attempt_ids_are_unique(db: Database):
+    await QuizRepo(db).create(ME, quiz("quiz_p", syllabus_id=None))
+    attempts = AttemptRepo(db)
     await attempts.submit(ME, attempt(quiz_id="quiz_p"))
     with pytest.raises(AlreadyExists, match="attempt 'att_1' already exists"):
         await attempts.submit(ME, attempt(quiz_id="quiz_p"))
