@@ -4,21 +4,34 @@ import {
   getConversation,
   NotFound,
   releaseSession,
+  reportQuizResults,
   sendMessage,
   startConversation,
   type AgentEvent,
   type TranscriptItem,
 } from '../api/chat'
+import QuizRunner from './QuizRunner.vue'
 
 type Part =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; id: string; name: string; status: 'running' | 'ok' | 'error' }
+  | { kind: 'quiz'; quizId: string }
 
 interface Message {
-  role: 'user' | 'agent'
+  // 'report': written by the app for the agent, e.g. quiz results, not typed by the learner.
+  role: 'user' | 'agent' | 'report'
   parts: Part[]
   error?: string
 }
+
+const roleStyle = {
+  user: 'self-end bg-blue-50',
+  agent: 'self-start bg-gray-100',
+  report: 'self-center bg-amber-50 text-sm text-gray-700',
+} satisfies Record<Message['role'], string>
+
+/** The quiz open in the quiz screen, if any. */
+const openQuiz = ref<string | null>(null)
 
 const messages = ref<Message[]>([])
 const draft = ref('')
@@ -64,12 +77,52 @@ function apply(message: Message, event: AgentEvent) {
       break
     case 'tool_result': {
       const part = message.parts.find((p) => p.kind === 'tool' && p.id === event.id)
-      if (part?.kind === 'tool') part.status = event.is_error ? 'error' : 'ok'
+      if (part?.kind !== 'tool') break
+      part.status = event.is_error ? 'error' : 'ok'
+      const quizId = part.name === 'create_quiz' && !event.is_error && quizIdFrom(event.output)
+      if (quizId) message.parts.push({ kind: 'quiz', quizId })
       break
     }
     case 'error':
       message.error = event.message
       break
+  }
+}
+
+/** The quiz id in create_quiz's result, which arrives as JSON text from some backends. */
+function quizIdFrom(output: unknown): string | null {
+  let value = output
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  const id = (value as { quiz_id?: unknown } | null)?.quiz_id
+  return typeof id === 'string' ? id : null
+}
+
+function reportLine(correct: number, total: number): Part {
+  return { kind: 'text', text: `Quiz finished: ${correct} of ${total} right` }
+}
+
+/** Once the learner has answered a quiz, tell the agent and stream its reply. */
+async function quizSubmitted(attemptId: string, correct: number, total: number) {
+  if (!conversationId) return
+  busy.value = true
+  messages.value.push({ role: 'report', parts: [reportLine(correct, total)] })
+  messages.value.push({ role: 'agent', parts: [] })
+  const reply = messages.value[messages.value.length - 1]
+  try {
+    await reportQuizResults(conversationId, attemptId, (event) => {
+      apply(reply, event)
+      scrollDown()
+    })
+  } catch (e) {
+    reply.error = e instanceof Error ? e.message : String(e)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -104,6 +157,10 @@ function replay(transcript: TranscriptItem[]): Message[] {
   for (const item of transcript) {
     if (item.type === 'user_message') {
       restored.push({ role: 'user', parts: [{ kind: 'text', text: item.text }] })
+      continue
+    }
+    if (item.type === 'quiz_results') {
+      restored.push({ role: 'report', parts: [reportLine(item.correct, item.total)] })
       continue
     }
     let reply = restored[restored.length - 1]
@@ -162,11 +219,18 @@ onBeforeUnmount(() => {
         :key="i"
         :class="[
           'max-w-[85%] rounded-lg px-3 py-2 leading-snug whitespace-pre-wrap',
-          m.role === 'user' ? 'self-end bg-blue-50' : 'self-start bg-gray-100',
+          roleStyle[m.role],
         ]"
       >
         <template v-for="(p, j) in m.parts" :key="j">
           <span v-if="p.kind === 'text'">{{ p.text }}</span>
+          <button
+            v-else-if="p.kind === 'quiz'"
+            class="my-1 block rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
+            @click="openQuiz = p.quizId"
+          >
+            Take the quiz
+          </button>
           <span
             v-else
             :class="[
@@ -203,5 +267,11 @@ onBeforeUnmount(() => {
         New chat
       </button>
     </form>
+    <QuizRunner
+      v-if="openQuiz"
+      :quiz-id="openQuiz"
+      @close="openQuiz = null"
+      @submitted="(a) => quizSubmitted(a.attempt_id, a.correct, a.total)"
+    />
   </section>
 </template>
