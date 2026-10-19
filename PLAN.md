@@ -17,7 +17,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 | 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Done (not merged) |
 | 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
 | 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged) |
-| 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Planned |
+| 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Done (not merged) |
 | 5 | `quiz-ui` | Quiz-taking interface: quizzes served without answers, the answer key kept out of the chat stream, answers submitted by the UI, and results sent back to the agent | 3, 4 | Planned |
 
 ## Design: progress is kept separate from the syllabus
@@ -176,6 +176,30 @@ The work is split into four branches. Each can be merged on its own and builds o
   merged into one item.
 - A conversation that exists in the database but not in memory (after a restart) is reopened
   with its stored resume token.
+- **As built:**
+  - Tables (`0002_conversations.sql`): `conversations`, `transcript_items` (one row per item,
+    numbered in order) and `resume_tokens` (one row per new token; the latest per backend
+    wins, since a token only means something to the backend that issued it).
+  - `ConversationRepo` (`db/conversations.py`) and the `Conversations` service
+    (`conversations/service.py`), which records each turn as it streams and reopens sessions.
+    Text is saved when a run ends, and what was said is kept even if the client goes away
+    mid-turn.
+  - Agent sessions open with a conversation's first message, and reopen from the latest
+    token whenever a message arrives with no live session. If the backend can't resume, a
+    fresh session starts: the transcript is kept, but the agent has no memory of it.
+  - The API moved from `/api/chat/sessions` to `/api/conversations`: `POST` to start,
+    `GET` to list (newest first), `GET /{id}` for the transcript, `POST /{id}/messages` to
+    stream a turn, and `DELETE /{id}/session` to release the live session while keeping the
+    conversation.
+  - The client remembers its conversation in `localStorage`, rebuilds the chat from the
+    transcript on load, and has a New chat button.
+  - **Deferred: the syllabus link.** Nothing reads it yet, and when to set it (at start,
+    when the agent creates a syllabus, or by the learner) is best decided with the syllabus
+    view.
+  - **Known gaps:** transcripts include `create_quiz` inputs, so they carry answer keys, like
+    the live stream (fixed in step 5). Reloading the page leaves the live session open until
+    the next New chat or shutdown, which is harmless because the reload picks the same
+    conversation back up.
 
 ### Step 5: quiz UI
 
