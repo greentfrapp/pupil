@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import ChatBox from './components/ChatBox.vue'
 
 interface Health {
   status: string
@@ -38,13 +39,15 @@ onMounted(ping)
     </p>
     <p v-else class="error">Sidecar unreachable: {{ error }}</p>
     <button :disabled="loading" @click="ping">Ping again</button>
+    <h2>Chat</h2>
+    <ChatBox />
   </main>
 </template>
 
 <style scoped>
 main {
   font-family: system-ui, sans-serif;
-  max-width: 32rem;
+  max-width: 40rem;
   margin: 4rem auto;
   padding: 0 1rem;
 }
