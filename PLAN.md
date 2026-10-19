@@ -16,7 +16,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 |---|---|---|---|---|
 | 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Done (not merged) |
 | 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
-| 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged; live test not yet run) |
+| 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged) |
 | 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Planned |
 
 ## Design: progress is kept separate from the syllabus
@@ -154,7 +154,8 @@ The work is split into four branches. Each can be merged on its own and builds o
   - The demo tutor gets the tools for the local learner, and its prompt describes the loop:
     placement quiz, syllabus, checkpoints, revisions.
   - The live test (`pytest -m live`) asks Claude to create a quiz with every question type
-    and submit answers to it.
+    and submit answers to it. It passed, so Claude accepts the schemas as they are and no
+    inlining is needed.
 
 ### Step 4: conversations
 
