@@ -1,0 +1,101 @@
+"""A syllabus: the roadmap for learning one topic.
+
+It is only the plan. What the learner knows lives in `progress`, keyed by objective id, so the
+plan can be revised without losing that. Objective ids must therefore stay stable: a reworded
+skill keeps its id, a different skill gets a new one.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class Objective(BaseModel):
+    """One thing the learner should be able to do; quiz questions are tagged with these ids."""
+
+    id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
+class Unit(BaseModel):
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    summary: str
+    objectives: list[Objective] = Field(min_length=1)
+    prerequisites: list[str] = Field(default_factory=list)
+    """Ids of units to learn before this one."""
+    estimated_minutes: int | None = Field(default=None, gt=0)
+
+
+class Syllabus(BaseModel):
+    id: str = Field(min_length=1)
+    topic: str = Field(min_length=1)
+    goal: str = Field(min_length=1)
+    """What the learner wants to be able to do by the end."""
+    units: list[Unit] = Field(min_length=1)
+    revision: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def _check_structure(self) -> Syllabus:
+        # Errors name the offending ids, so an agent can fix what it wrote.
+        _reject_duplicates("unit", [u.id for u in self.units])
+        _reject_duplicates("objective", [o.id for u in self.units for o in u.objectives])
+        known = {u.id for u in self.units}
+        for unit in self.units:
+            unknown = [p for p in unit.prerequisites if p not in known]
+            if unknown:
+                raise ValueError(f"unit {unit.id!r} has unknown prerequisites: {unknown}")
+        cycle = _find_cycle(self.units)
+        if cycle:
+            raise ValueError(
+                f"prerequisite cycle: {' -> '.join(cycle)} (each unit requires the next)"
+            )
+        return self
+
+    def units_in_order(self) -> list[Unit]:
+        """Units with every prerequisite before its dependents, otherwise in authored order."""
+        placed: set[str] = set()
+        ordered: list[Unit] = []
+        remaining = list(self.units)
+        while remaining:
+            # The validator rules out cycles, so some unit is always ready.
+            unit = next(u for u in remaining if placed.issuperset(u.prerequisites))
+            remaining.remove(unit)
+            placed.add(unit.id)
+            ordered.append(unit)
+        return ordered
+
+    def objective_ids(self) -> set[str]:
+        return {o.id for u in self.units for o in u.objectives}
+
+
+def _reject_duplicates(kind: str, ids: list[str]) -> None:
+    duplicates = sorted(i for i, n in Counter(ids).items() if n > 1)
+    if duplicates:
+        raise ValueError(f"duplicate {kind} ids: {duplicates}")
+
+
+def _find_cycle(units: list[Unit]) -> list[str] | None:
+    """A cycle as a path that ends where it starts, e.g. ['a', 'b', 'a'], or None."""
+    requires = {u.id: u.prerequisites for u in units}
+    done: set[str] = set()
+
+    def visit(unit_id: str, path: list[str]) -> list[str] | None:
+        if unit_id in path:
+            return path[path.index(unit_id) :] + [unit_id]
+        if unit_id in done:
+            return None
+        for prerequisite in requires[unit_id]:
+            cycle = visit(prerequisite, [*path, unit_id])
+            if cycle:
+                return cycle
+        done.add(unit_id)
+        return None
+
+    for unit in units:
+        cycle = visit(unit.id, [])
+        if cycle:
+            return cycle
+    return None
