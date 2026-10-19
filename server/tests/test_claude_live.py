@@ -1,12 +1,17 @@
 """Talks to the real Claude backend. Billed; run with `pytest -m live`."""
 
+import json
+
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from pupil_server.agents import AgentConfig, ToolCall, ToolResult, TurnComplete, tool
 from pupil_server.agents.claude import ClaudeBackend
+from pupil_server.app import create_app
 from pupil_server.db import LOCAL_LEARNER, Database
 from pupil_server.learning.tools import learning_tools
+from pupil_server.settings import Settings
 
 pytestmark = pytest.mark.live
 
@@ -66,3 +71,27 @@ async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
     succeeded = {calls[e.id] for e in events if isinstance(e, ToolResult) and not e.is_error}
     assert "create_quiz" in succeeded
     assert "submit_quiz_answers" in succeeded
+
+
+def test_a_conversation_resumes_after_a_restart(tmp_path):
+    # Two app instances on one database, as before and after a restart of the sidecar.
+    def app():
+        backend = ClaudeBackend(workdir=tmp_path / "agent")
+        return create_app(Settings(), db_path=tmp_path / "pupil.db", agent_backend=backend)
+
+    def say(client: TestClient, conversation_id: str, text: str) -> str:
+        res = client.post(f"/api/conversations/{conversation_id}/messages", json={"text": text})
+        events = [
+            json.loads(line[6:]) for line in res.text.splitlines() if line.startswith("data: ")
+        ]
+        assert events[-1]["type"] == "turn_complete", events[-1]
+        return "".join(e["text"] for e in events if e["type"] == "text_delta")
+
+    with TestClient(app()) as client:
+        conversation_id = client.post("/api/conversations").json()["conversation_id"]
+        say(client, conversation_id, "Please remember the word 'tangerine'. Just reply 'OK'.")
+
+    with TestClient(app()) as client:
+        reply = say(client, conversation_id, "Which word did I ask you to remember? One word.")
+
+    assert "tangerine" in reply.lower()
