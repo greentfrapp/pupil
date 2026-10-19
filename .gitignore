@@ -1,0 +1,14 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Local config (settings.py reads PUPIL_* from .env)
+.env
+.env.*

@@ -1,0 +1,13 @@
+{
+  "name": "pupil",
+  "private": true,
+  "packageManager": "pnpm@10.11.1",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"pnpm dev:server\" \"pnpm dev:client\"",
+    "dev:server": "uv run --project server uvicorn pupil_server.app:app --host 127.0.0.1 --port 8787 --reload --reload-dir server/src",
+    "dev:client": "pnpm --filter client dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
