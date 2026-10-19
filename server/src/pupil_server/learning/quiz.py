@@ -146,11 +146,17 @@ class Quiz(BaseModel):
     questions: list[Question] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _check_ids(self) -> Quiz:
+    def _check_structure(self) -> Quiz:
         ids = [q.id for q in self.questions]
         duplicates = sorted(i for i, n in Counter(ids).items() if n > 1)
         if duplicates:
             raise ValueError(f"duplicate question ids: {duplicates}")
+        if self.syllabus_id is None:
+            if self.purpose == "checkpoint":
+                raise ValueError("a checkpoint quiz needs a syllabus_id")
+            tagged = [q.id for q in self.questions if q.objective_ids]
+            if tagged:
+                raise ValueError(f"questions tagged without a syllabus_id: {tagged}")
         return self
 
     def check_tags(self, syllabus: Syllabus) -> None:

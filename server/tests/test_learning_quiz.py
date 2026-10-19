@@ -122,8 +122,20 @@ def test_quiz_rejects_duplicate_question_ids():
         Quiz(id="quiz", title="t", purpose="placement", questions=[choice("q1"), choice("q1")])
 
 
+def test_checkpoint_quiz_needs_a_syllabus():
+    with pytest.raises(ValidationError, match="a checkpoint quiz needs a syllabus_id"):
+        Quiz(id="quiz", title="t", purpose="checkpoint", questions=[choice("q1")])
+
+
+def test_quiz_without_a_syllabus_rejects_tags():
+    with pytest.raises(
+        ValidationError, match=re.escape("questions tagged without a syllabus_id: ['q1', 'q2']")
+    ):
+        quiz(tags=("obj_a",))
+
+
 def test_grade_attempt_counts_unanswered_as_incorrect():
-    q = quiz(tags=("obj_a",))
+    q = quiz("syl_1", tags=("obj_a",))
     attempt = QuizAttempt(
         id="att_1",
         quiz_id="quiz_1",
@@ -166,8 +178,8 @@ def test_check_tags():
         quiz("syl_1").check_tags(SYLLABUS)
     with pytest.raises(ValueError, match=re.escape("not in syllabus 'syl_1': ['obj_zzz']")):
         quiz("syl_1", tags=("obj_zzz",)).check_tags(SYLLABUS)
-    with pytest.raises(ValueError, match="quiz is for syllabus None"):
-        quiz(tags=("obj_a",)).check_tags(SYLLABUS)
+    with pytest.raises(ValueError, match="quiz is for syllabus 'syl_2'"):
+        quiz("syl_2", tags=("obj_a",)).check_tags(SYLLABUS)
 
 
 @pytest.mark.parametrize(
