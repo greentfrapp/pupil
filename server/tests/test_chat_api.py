@@ -122,7 +122,7 @@ def test_tutor_tools_write_to_the_apps_database(tmp_path: Path):
                 "id": "basics",
                 "title": "Basics",
                 "summary": "",
-                "objectives": [{"id": "o", "text": "t"}],
+                "objectives": [{"text": "t"}],
             }
         ],
     }

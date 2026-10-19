@@ -151,7 +151,18 @@ The work is split into four branches. Each can be merged on its own and builds o
   - Added `list_syllabi`, so a new conversation can find the learner's existing syllabi.
   - `revise_syllabus` takes the whole syllabus plus `based_on_revision`; a stale revision comes
     back as an error telling the agent to read it again.
-  - Model field docstrings appear as descriptions in the tool schemas.
+  - Model field docstrings appear as descriptions in the tool schemas, and unknown fields are
+    refused rather than ignored.
+  - **The objective-id rule is checked, not just described.** Code can't tell whether new
+    wording is the same skill, so these checks guard the cases that lose or misattribute
+    progress:
+    - New objectives get their ids from the tools; the agent leaves the id out. Keeping an
+      objective means copying its id, and an id not in the current revision is refused.
+    - An objective the learner has evidence on can only be dropped by listing it in
+      `retired_objectives`; otherwise the revision is refused. Objectives without evidence
+      can be dropped freely.
+    - `revise_syllabus` returns the objectives added, reworded and removed, and warns when an
+      objective with evidence was reworded, asking the agent to confirm it is the same skill.
   - The demo tutor gets the tools for the local learner, and its prompt describes the loop:
     placement quiz, syllabus, checkpoints, revisions.
   - The live test (`pytest -m live`) asks Claude to create a quiz with every question type
