@@ -6,10 +6,9 @@ evidence; the logic that does that comes later, so these are types only for now.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class Evidence(BaseModel):
@@ -19,7 +18,7 @@ class Evidence(BaseModel):
     attempt_id: str
     question_id: str
     correct: bool
-    at: datetime
+    at: AwareDatetime
 
 
 Mastery = Literal["unknown", "learning", "mastered"]

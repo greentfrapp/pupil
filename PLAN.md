@@ -15,7 +15,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
 | 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Done (not merged) |
-| 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Planned |
+| 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
 | 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Planned |
 | 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Planned |
 
@@ -115,11 +115,26 @@ The work is split into four branches. Each can be merged on its own and builds o
   evidence are never updated. Whole documents (a syllabus revision, a quiz) are stored as
   pydantic JSON in `body` columns; anything queried per item (evidence, results) gets its own
   table.
-- **Access:** the standard library's `sqlite3` with repository classes, run off the event loop
-  via `asyncio.to_thread`. Migrations are numbered SQL files tracked by `PRAGMA user_version`.
-- **Learners:** `learner_id` on every record, with a seeded local learner (`lrn_local`).
+- **Access:** the standard library's `sqlite3` with repository classes. Rather than
+  `asyncio.to_thread`, `Database` keeps its one connection on a single worker thread, so calls
+  never overlap, even when the request awaiting one is cancelled. Each call is one transaction.
+  Migrations are numbered SQL files (`db/migrations/NNNN_name.sql`) tracked by
+  `PRAGMA user_version`, and a database newer than the code is refused.
+- **Learners:** `learner_id` on every record, with the local learner (`lrn_local`) seeded at
+  startup. Every repository method takes the learner and sees only their records.
 - **Conventions:** ids are prefixed random strings (`lrn_`, `syl_`, `quiz_`, `att_`, `conv_`),
-  and timestamps are ISO 8601 UTC text.
+  made with `new_id`, and timestamps are ISO 8601 UTC text. Model timestamps must have a
+  timezone.
+- **As built (`db/learning.py`):**
+  - `SyllabusRepo`: `create` stores revision 1. `revise` stores the next revision, and refuses
+    a change based on a revision that is no longer the latest (`StaleRevision`). `get` returns
+    the latest or a given revision, and `list_latest` lists the learner's syllabi.
+  - `QuizRepo`: `create` checks a syllabus quiz's tags against the latest revision.
+  - `AttemptRepo`: `submit` grades an attempt and stores it, with a `question_results` row
+    per question and, for a syllabus quiz, an `evidence` row per tagged objective, in one
+    transaction. `get` and `results` read them back.
+  - `EvidenceRepo.for_syllabus` lists the evidence, oldest first. Mastery is still to come.
+  - Missing records raise `NotFound` and reused ids raise `AlreadyExists`.
 
 ### Step 3: agent tools
 

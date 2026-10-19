@@ -6,10 +6,9 @@ Every question type is graded by code, never by a model, so results are reproduc
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 from pupil_server.learning.syllabus import Syllabus
 
@@ -177,7 +176,7 @@ class QuizAttempt(BaseModel):
     quiz_id: str
     responses: dict[str, Response]
     """Question id to the learner's response; unanswered questions are simply absent."""
-    submitted_at: datetime
+    submitted_at: AwareDatetime
 
 
 class QuestionResult(BaseModel):
