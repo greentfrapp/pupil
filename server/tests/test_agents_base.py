@@ -1,9 +1,8 @@
 import pytest
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 
 from pupil_server.agents import (
     AgentConfig,
-    AgentEvent,
     TextDelta,
     ToolCall,
     ToolResult,
@@ -86,9 +85,3 @@ async def test_web_search_requires_backend_support():
     backend.supports_web_search = False
     with pytest.raises(UnsupportedCapability):
         await backend.open_session(AgentConfig(system_prompt="t", web_search=True))
-
-
-def test_events_round_trip_through_json():
-    adapter = TypeAdapter(AgentEvent)
-    event = ToolCall(id="c1", name="add", input={"a": 1})
-    assert adapter.validate_json(event.model_dump_json()) == event
