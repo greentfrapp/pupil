@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Objective(BaseModel):
@@ -20,6 +20,9 @@ class Objective(BaseModel):
 
 
 class Unit(BaseModel):
+    # Field docstrings become descriptions in the schema an agent sees.
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     summary: str

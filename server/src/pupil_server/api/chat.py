@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from pupil_server.agents.demo import demo_config
 from pupil_server.agents.sessions import SessionBusy, SessionNotFound, SessionStore
+from pupil_server.db import LOCAL_LEARNER
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -29,7 +30,9 @@ def _store(request: Request) -> SessionStore:
 @router.post("/sessions", status_code=201)
 async def create_session(request: Request) -> SessionCreated:
     try:
-        session_id = await _store(request).open(demo_config())
+        # One learner until remote mode adds accounts.
+        config = demo_config(request.app.state.db, LOCAL_LEARNER)
+        session_id = await _store(request).open(config)
     except Exception as exc:
         raise HTTPException(502, f"could not start agent: {exc or type(exc).__name__}") from exc
     return SessionCreated(session_id=session_id)

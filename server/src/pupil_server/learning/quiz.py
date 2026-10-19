@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from pupil_server.learning.syllabus import Syllabus
 
@@ -16,21 +16,29 @@ from pupil_server.learning.syllabus import Syllabus
 
 
 class ChoiceResponse(BaseModel):
+    """An answer to a multiple_choice question: the ids of the options picked."""
+
     kind: Literal["choice"] = "choice"
     option_ids: list[str]
 
 
 class BoolResponse(BaseModel):
+    """An answer to a true_false question."""
+
     kind: Literal["bool"] = "bool"
     value: bool
 
 
 class NumberResponse(BaseModel):
+    """An answer to a numeric question."""
+
     kind: Literal["number"] = "number"
     value: float = Field(allow_inf_nan=False)
 
 
 class TextResponse(BaseModel):
+    """An answer to a text_match question."""
+
     kind: Literal["text"] = "text"
     text: str
 
@@ -50,12 +58,16 @@ def _expect[R: BaseModel](question: QuestionBase, response: BaseModel, kind: typ
 
 
 class QuestionBase(BaseModel):
+    # Field docstrings become descriptions in the schema an agent sees.
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
     kind: str
     id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     objective_ids: list[str] = Field(default_factory=list)
     """Syllabus objectives this question tests; required once the quiz is tied to a syllabus."""
     difficulty: int = Field(ge=1, le=5)
+    """1 (easiest) to 5."""
     explanation: str | None = None
     """Shown to the learner after they answer."""
 
@@ -66,9 +78,12 @@ class Option(BaseModel):
 
 
 class MultipleChoice(QuestionBase):
+    """Answered by picking one option, or every correct option when multiple is true."""
+
     kind: Literal["multiple_choice"] = "multiple_choice"
     options: list[Option] = Field(min_length=2)
     correct: list[str] = Field(min_length=1)
+    """Ids of the correct options."""
     multiple: bool = False
     """Whether the learner should pick every correct option rather than exactly one."""
 
@@ -96,6 +111,8 @@ class MultipleChoice(QuestionBase):
 
 
 class TrueFalse(QuestionBase):
+    """A statement the learner says is true or false."""
+
     kind: Literal["true_false"] = "true_false"
     answer: bool
 
@@ -104,18 +121,25 @@ class TrueFalse(QuestionBase):
 
 
 class Numeric(QuestionBase):
+    """Answered with a number."""
+
     kind: Literal["numeric"] = "numeric"
     answer: float = Field(allow_inf_nan=False)
     tolerance: float = Field(default=0, ge=0, allow_inf_nan=False)
+    """How far from the answer still counts as right."""
     unit: str | None = None
+    """The unit the answer is in, if any, e.g. 'cm'."""
 
     def grade(self, response: BaseModel) -> bool:
         return abs(_expect(self, response, NumberResponse).value - self.answer) <= self.tolerance
 
 
 class TextMatch(QuestionBase):
+    """Answered with a short text that must match an accepted answer."""
+
     kind: Literal["text_match"] = "text_match"
     accepted: list[str] = Field(min_length=1)
+    """Every answer that counts as right. Spacing, and case unless case_sensitive, are ignored."""
     case_sensitive: bool = False
 
     @model_validator(mode="after")
