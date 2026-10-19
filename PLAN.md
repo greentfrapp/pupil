@@ -66,7 +66,8 @@ The work is split into four branches. Each can be merged on its own and builds o
   - Multiple choice: the set of chosen ids must equal the set of correct ids.
   - Numeric: `abs(value - answer) <= tolerance`.
 - **Quizzes:** `Quiz(id, title, purpose: Literal["placement", "checkpoint"], syllabus_id: str | None, questions (≥1))`,
-  with unique question ids. `Quiz.check_tags(syllabus)` makes sure every question has at least
+  with unique question ids. A checkpoint quiz needs a `syllabus_id`, and a quiz without one
+  can't have tagged questions. `Quiz.check_tags(syllabus)` makes sure every question has at least
   one tag and every tag exists in the syllabus. Step 2 calls it when storing a syllabus-linked
   quiz.
 - **Attempts:** `QuizAttempt(id, quiz_id, responses: dict[str, Response], submitted_at)` and
@@ -96,6 +97,7 @@ The work is split into four branches. Each can be merged on its own and builds o
     just past it, text normalisation and case sensitivity.
   - A response of the wrong kind raises an error.
   - `grade_attempt` handles unanswered questions and rejects unknown ids.
+  - A checkpoint quiz without a syllabus, and tags on a quiz without one, are rejected.
   - `check_tags` catches unknown tags and untagged questions.
   - A response told apart by `kind` survives conversion to JSON and back. These are shaped by
     our own validators, and the database stores them as JSON in step 2.
