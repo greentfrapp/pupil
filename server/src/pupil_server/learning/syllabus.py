@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Objective(BaseModel):
@@ -20,6 +20,9 @@ class Objective(BaseModel):
 
 
 class Unit(BaseModel):
+    # Field docstrings become descriptions in the schema an agent sees.
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     summary: str
@@ -69,6 +72,36 @@ class Syllabus(BaseModel):
 
     def objective_ids(self) -> set[str]:
         return {o.id for u in self.units for o in u.objectives}
+
+    def objectives(self) -> dict[str, Objective]:
+        return {o.id: o for u in self.units for o in u.objectives}
+
+
+class Reworded(BaseModel):
+    id: str
+    before: str
+    after: str
+
+
+class ObjectiveChanges(BaseModel):
+    """How the objectives differ between two revisions, matched by id."""
+
+    added: list[Objective]
+    reworded: list[Reworded]
+    removed: list[Objective]
+
+
+def objective_changes(before: Syllabus, after: Syllabus) -> ObjectiveChanges:
+    old, new = before.objectives(), after.objectives()
+    return ObjectiveChanges(
+        added=[o for i, o in new.items() if i not in old],
+        reworded=[
+            Reworded(id=i, before=old[i].text, after=o.text)
+            for i, o in new.items()
+            if i in old and old[i].text != o.text
+        ],
+        removed=[o for i, o in old.items() if i not in new],
+    )
 
 
 def _reject_duplicates(kind: str, ids: list[str]) -> None:

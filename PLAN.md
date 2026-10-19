@@ -16,8 +16,9 @@ The work is split into four branches. Each can be merged on its own and builds o
 |---|---|---|---|---|
 | 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Done (not merged) |
 | 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
-| 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Planned |
+| 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged) |
 | 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Planned |
+| 5 | `quiz-ui` | Quiz-taking interface: quizzes served without answers, the answer key kept out of the chat stream, answers submitted by the UI, and results sent back to the agent | 3, 4 | Planned |
 
 ## Design: progress is kept separate from the syllabus
 
@@ -144,6 +145,29 @@ The work is split into four branches. Each can be merged on its own and builds o
 - **Risk:** the question union produces a JSON schema with `oneOf`, `$defs` and `$ref`. Claude
   must accept that as a tool input schema; the live test checks it. If it fails, inline the
   schema so it has no `$ref`s.
+- **As built (`learning/tools.py`):**
+  - `learning_tools(db, learner_id)` builds the tools for one learner. The tools assign ids
+    and timestamps, so the agent never makes them up.
+  - Added `list_syllabi`, so a new conversation can find the learner's existing syllabi.
+  - `revise_syllabus` takes the whole syllabus plus `based_on_revision`; a stale revision comes
+    back as an error telling the agent to read it again.
+  - Model field docstrings appear as descriptions in the tool schemas, and unknown fields are
+    refused rather than ignored.
+  - **The objective-id rule is checked, not just described.** Code can't tell whether new
+    wording is the same skill, so these checks guard the cases that lose or misattribute
+    progress:
+    - New objectives get their ids from the tools; the agent leaves the id out. Keeping an
+      objective means copying its id, and an id not in the current revision is refused.
+    - An objective the learner has evidence on can only be dropped by listing it in
+      `retired_objectives`; otherwise the revision is refused. Objectives without evidence
+      can be dropped freely.
+    - `revise_syllabus` returns the objectives added, reworded and removed, and warns when an
+      objective with evidence was reworded, asking the agent to confirm it is the same skill.
+  - The demo tutor gets the tools for the local learner, and its prompt describes the loop:
+    placement quiz, syllabus, checkpoints, revisions.
+  - The live test (`pytest -m live`) asks Claude to create a quiz with every question type
+    and submit answers to it. It passed, so Claude accepts the schemas as they are and no
+    inlining is needed.
 
 ### Step 4: conversations
 
@@ -153,14 +177,35 @@ The work is split into four branches. Each can be merged on its own and builds o
 - A conversation that exists in the database but not in memory (after a restart) is reopened
   with its stored resume token.
 
+### Step 5: quiz UI
+
+Quizzes are taken in their own interface, not in the chat. The agent writes the whole quiz in
+one `create_quiz` call, tells the learner it is ready and ends its turn. The UI then shows the
+questions one at a time. (The tutor's prompt already asks for this.)
+
+- **Quizzes without answers:** `GET /api/quizzes/{id}` returns the learner's view of a quiz,
+  without `correct`, `answer`, `accepted` or `explanation` fields. Explanations come back with
+  the results.
+- **Keeping the answer key out of the chat stream:** today every `tool_call` event carries the
+  tool's full input, so `create_quiz` would send the answers to the browser. Its input is
+  stripped from the stream, and the client opens the quiz from the `quiz_id` in the tool result.
+- **Answers come from the UI:** `POST /api/quizzes/{id}/attempts` grades and stores them with
+  `AttemptRepo.submit`, and returns each question's result and explanation. The agent never
+  relays answers, so it can't alter them. `submit_quiz_answers` stays for chat-only use, or is
+  dropped.
+- **Results go back to the agent:** when the learner finishes, the app sends the results into
+  the conversation as the next message (e.g. "Quiz finished: 3 of 5 right; q2 and q4 wrong"), so
+  the agent can explain mistakes and revise the syllabus. This needs messages the learner didn't
+  type, which builds on step 4's transcripts.
+- **Client:** a quiz component with one screen per question type, and TypeScript types for the
+  learner's view of a quiz and for results.
+
 ## Other gaps, not yet scheduled
 
-- **Hiding the answer key:** a view of a quiz without its answers, needed before a quiz-taking
-  UI sends quizzes to the browser.
 - **Evolving stored JSON:** stored bodies must stay readable as the models change. Model changes
   must be backward-compatible, or a migration must rewrite the stored JSON.
 - **Learner data:** export and deletion, since this is a consumer app holding learner
   transcripts. Also backups of `~/Pupil/pupil.db`.
 - **Remote mode:** authentication, and mapping requests to a `learner_id`.
-- **UI:** a transcript view, a quiz-taking UI, a syllabus view, and TypeScript types for these
-  models.
+- **UI:** a transcript view, a syllabus view, and TypeScript types for these models. The
+  quiz-taking UI is step 5.

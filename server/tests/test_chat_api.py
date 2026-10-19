@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from pupil_server.agents import TextDelta, TurnComplete
 from pupil_server.agents.fake import Call, FakeBackend, Say
 from pupil_server.app import create_app
+from pupil_server.db import LOCAL_LEARNER
+from pupil_server.db.learning import SyllabusRepo
 from pupil_server.settings import Settings
 
 
@@ -85,11 +87,11 @@ def test_delete_closes_the_session(client: TestClient, backend: FakeBackend):
 
 
 async def test_busy_session_is_rejected(tmp_path: Path, backend: FakeBackend):
-    from pupil_server.agents.demo import demo_config
+    from pupil_server.agents import AgentConfig
     from pupil_server.agents.sessions import SessionBusy, SessionStore
 
     store = SessionStore(backend)
-    session_id = await store.open(demo_config())
+    session_id = await store.open(AgentConfig(system_prompt="Tutor"))
     stream = store.send(store.claim(session_id), "first")
     await anext(stream)  # turn in progress, lock held
     with pytest.raises(SessionBusy):
@@ -109,6 +111,31 @@ def test_backend_failure_becomes_error_event(client: TestClient, backend: FakeBa
         client.post(f"/api/chat/sessions/{session_id}/messages", json={"text": "x"}).text
     )
     assert events == [{"type": "error", "message": "ConnectionError: model went away"}]
+
+
+def test_tutor_tools_write_to_the_apps_database(tmp_path: Path):
+    plan = {
+        "topic": "Python",
+        "goal": "Write small scripts",
+        "units": [
+            {
+                "id": "basics",
+                "title": "Basics",
+                "summary": "",
+                "objectives": [{"text": "t"}],
+            }
+        ],
+    }
+    backend = FakeBackend([[Call("create_syllabus", plan)]])
+    app = create_app(Settings(), db_path=tmp_path / "t.db", agent_backend=backend)
+    with TestClient(app) as c:
+        session_id = c.post("/api/chat/sessions").json()["session_id"]
+        res = c.post(f"/api/chat/sessions/{session_id}/messages", json={"text": "plan it"})
+        result = next(e for e in _events(res.text) if e["type"] == "tool_result")
+        assert not result["is_error"]
+
+        stored = c.portal.call(SyllabusRepo(app.state.db).list_latest, LOCAL_LEARNER)
+    assert [s.topic for s in stored] == ["Python"]
 
 
 def test_sessions_closed_on_shutdown(tmp_path: Path, backend: FakeBackend):
