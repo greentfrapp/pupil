@@ -1,8 +1,7 @@
 """FastAPI application factory.
 
-Wiring only: the Store and RunRegistry are created once at startup and shut down in
-reverse order, because the registry's backends emit into the store and must be closed
-before it is.
+Wiring only: the database and agent sessions are opened once at startup and closed in reverse
+order, so no session is still using the database when it closes.
 
 Routes live in `pupil_server.api`.
 """
@@ -20,6 +19,7 @@ from pupil_server import __version__
 from pupil_server.agents import AgentBackend, make_backend
 from pupil_server.agents.sessions import SessionStore
 from pupil_server.api import chat
+from pupil_server.db import Database, DatabaseTooNew
 from pupil_server.lock import DatabaseInUse, DatabaseLock
 from pupil_server.loop import LoopCannotSpawn, require_subprocess_support
 from pupil_server.settings import Settings
@@ -43,23 +43,6 @@ def create_app(
     agents = SessionStore(agent_backend or make_backend(config.agent_backend))
 
     @asynccontextmanager
-    async def _serving(app: FastAPI, database: Path) -> AsyncIterator[None]:
-        # The registry isn't wired up yet; serve without it until it is.
-        registry = getattr(app.state, "registry", None)
-        if registry is None:
-            yield
-            return
-        await registry.policy.preload()
-        await registry.expire_orphaned_permissions()
-        await registry.settle_stranded_runs()
-        await registry.settle_stranded_jobs()
-        registry.start()
-        try:
-            yield
-        finally:
-            await registry.close()
-
-    @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             require_subprocess_support()
@@ -74,11 +57,17 @@ def create_app(
             log.error("%s", exc)
             raise
         try:
-            async with _serving(app, database):
-                try:
-                    yield
-                finally:
-                    await agents.close_all()
+            try:
+                db = await Database.open(database)
+            except DatabaseTooNew as exc:
+                log.error("%s", exc)
+                raise
+            app.state.db = db
+            try:
+                yield
+            finally:
+                await agents.close_all()
+                await db.close()
         finally:
             lock.release()
 

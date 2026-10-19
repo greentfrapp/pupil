@@ -14,7 +14,7 @@ def pupil_home() -> Path:
 
 
 def _default_db_path() -> Path:
-    """Where the event log lives by default."""
+    """Where the database lives by default."""
     return pupil_home() / "pupil.db"
 
 
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    # Event log + derived state tables.
+    # Syllabi, quizzes, attempts and learner progress.
     db_path: Path = Field(default_factory=_default_db_path)
 
     # Which agent runtime serves chat sessions; "fake" needs no model or credentials.
