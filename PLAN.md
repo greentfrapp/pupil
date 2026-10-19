@@ -14,7 +14,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
-| 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Planned |
+| 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Done (not merged) |
 | 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Planned |
 | 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Planned |
 | 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Planned |
@@ -62,7 +62,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 - **Responses** mirror the question types: `ChoiceResponse(option_ids)`, `BoolResponse(value)`,
   `NumberResponse(value)` and `TextResponse(text)`, also told apart by `kind`.
 - **Grading:** each question has `grade(response) -> bool`, and a response of the wrong kind
-  raises `ValueError`.
+  raises `TypeError`.
   - Multiple choice: the set of chosen ids must equal the set of correct ids.
   - Numeric: `abs(value - answer) <= tolerance`.
 - **Quizzes:** `Quiz(id, title, purpose: Literal["placement", "checkpoint"], syllabus_id: str | None, questions (≥1))`,
