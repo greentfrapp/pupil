@@ -38,8 +38,8 @@ proposals and short answers.
   Nothing is resumed, so cost per lesson stays flat, restarts don't matter, and runs don't
   queue behind each other. Runs are logged for debugging but never replayed to the agent.
 - **What the agent knows comes from the database:** the syllabus, evidence (and mastery, from
-  step 5), past lessons and their results, a **learner profile** (goal, level, time per day,
-  preferences from intake and feedback) and **notes** the agent writes with a tool ("prefers
+  step 6), past lessons and their results, a **profile** per topic (setup answers, and
+  preferences from feedback) and **notes** the agent writes with a tool ("prefers
   real-world examples"). Anything from free text must be written down this way, or it's
   forgotten.
 - **Teach through questions.** The default is to teach inside the question ("In Python, `//`
@@ -65,7 +65,7 @@ proposals and short answers.
 | Open-ended skills (writing, argument, design) can't be graded by our question types | LLM-graded free text with a rubric (later): costs money, adds latency, can be inconsistent |
 | Multiple choice tests recognition, not production | Fill in the blank, ordering and matching (step 2); maybe running code later |
 | Generated answer keys can be wrong | "Report a problem" and answer-key correction (later); maybe a second model check at creation |
-| Lots of quick questions can stay shallow | "Why?" questions, interleaving, spaced review (step 5) |
+| Lots of quick questions can stay shallow | "Why?" questions, interleaving, spaced review (step 6) |
 | Generating a lesson takes seconds to tens of seconds | Generate the next lesson in the background (step 3) |
 | The agent only knows what the brief and notes tell it | Keep the brief complete but bounded; review what it holds as steps land |
 | Physical skills | Quizzes cover the theory only; accepted |
@@ -78,15 +78,20 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 |---|---|---|---|---|
 | 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Not started |
 | 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Not started |
-| 3 | `topic-path` | One-off agent runs with a brief, learner profile and notes; topic intake, placement, a path screen and the next lesson generated in the background. Removes the chat and resuming conversations. | 1 | Not started |
-| 4 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 3 | Not started |
-| 5 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 3 | Not started |
+| 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Not started |
+| 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Not started |
+| 5 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 4 | Not started |
+| 6 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 4 | Not started |
 
 ### Step 1: lessons
 - **Model: the quiz type is extended and renamed to `Lesson`.** A lesson is an ordered list of
-  items, each a question (the existing union) or a teach card (title, short text). Placement
-  and checkpoint quizzes become lessons without teach cards, so grading, attempts, evidence and
-  the learner view carry over. The rename covers the `quizzes` table, the API and the tools.
+  items, each a question (the existing union) or a teach card (title, short text). Grading,
+  attempts, evidence and the learner view carry over. The rename covers the `quizzes` table,
+  the API and the tools.
+- **Purposes are `placement` and `lesson`** (`review` comes in step 6); checkpoint quizzes are
+  dropped until a "test out of this unit" is wanted. A placement lesson has no teach cards
+  (checked by the model) and can't be retried; redoing placement means starting the topic
+  again.
 - **Taking a lesson:** the player sends each answer to a check endpoint, which grades it
   without storing anything and returns whether it was right, the correct answer and the
   explanation. When the lesson ends, the player submits all the answers as one attempt, as
@@ -104,10 +109,12 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   option order.
 - **Every attempt counts as evidence,** so improvement shows. Attempts are numbered per lesson,
   so first attempts can be told from retries, which test recall of answers already shown. How
-  much each counts towards mastery is decided in step 5.
+  much each counts towards mastery is decided in step 6.
 - **Schema:** the `quizzes` table becomes `lessons`, stored bodies hold `items` rather than
   `questions`, and attempts are numbered per lesson. Attempts are still written once, when
-  submitted, so the tables stay append-only.
+  submitted, so the tables stay append-only. **Existing data is reset, not migrated:** the
+  migrations are squashed into a new `0001`, and an old database is refused as too new
+  (`DatabaseTooNew`) until `~/Pupil/pupil.db` is deleted.
 - **Results aren't reported to the agent.** The `quiz_results` message and its endpoint are
   removed. While the chat remains, the agent reads results with a tool (e.g. `recent_results`)
   when the learner asks for the next lesson; from step 3 they go in the run's brief.
@@ -123,30 +130,62 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   matching (pair items). Each needs a model, grading, a learner view, a description of its
   correct answer and a player input.
 
-### Step 3: topic path
-- **One-off agent runs:** a brief built from the database for each job, a learner profile, and
-  a tool for the agent to write notes.
+### Step 3: agent runs
+- **Topics:** a `topics` table (id, learner, the line they typed, created). Everything else
+  points at the topic, so the topic row never changes and the tables stay append-only: setup
+  answers, syllabi and lessons get a `topic_id` (the newest syllabus for a topic is its plan;
+  a placement lesson belongs to the topic before any syllabus exists), and so do feedback,
+  notes and runs. A topic's next lesson is ready when it has a lesson with no attempts.
+- **Profile and notes are per topic** for now; sharing them across topics can come later.
+- **One-off agent runs:** a brief built from the database for each job, the topic's profile,
+  and a tool for the agent to write notes.
 - **The brief holds what every run needs:** the profile, notes, the current syllabus, results
   since the last run, and a one-line summary of each recent lesson. Details needed only
   sometimes (a past lesson's questions, older evidence) are fetched with read tools.
 - **Run logs:** `conversations` becomes `runs`, each recording its job (intake, next lesson,
   ask), topic, start and finish times and cost; `transcript_items` stays under runs. Kept for
   debugging bad lessons and tracking cost, never replayed to the agent.
-- **Intake:** the learner types what they want to learn; the agent replies with two or three
-  setup questions to tap (goal, current level, time per day), then a placement lesson, then
-  the syllabus.
-- **Path screen:** the syllabus as a path of units with the next lesson highlighted, and a list
-  of topics to switch between.
 - **Background generation:** when a topic has no unstarted lesson ready, a run prepares the
   next one while the learner looks at their results. Its brief holds the results since the
   last run, and the same run can revise the syllabus. The client learns when it's ready.
   **At most one generation run per topic at a time:** a request that would start another
   while one is going waits for it instead. One server process, so an in-memory marker per
   topic is enough.
+- Testable end to end with the fake backend before any new screens exist.
+
+### Step 4: topic path
+- **Intake:** the learner types what they want to learn, then answers fixed setup questions
+  written into the app, not by the agent (instant and free), one per screen. The answers go
+  in the brief as structured fields, and the agent's instructions say what each answer
+  changes:
+  1. **"Why are you learning this?"** Shapes the syllabus's units, their order, and the kind
+     of question.
+     | Answer | Syllabus | Lessons |
+     |---|---|---|
+     | For work | Practical tasks first; theory only as needed | Realistic scenarios, "what would you do" questions |
+     | For a course or exam | The standard curriculum, in its usual order | Exam-style questions and wording |
+     | To build something | Ordered by what the project needs next | Questions framed around the project |
+     | Curiosity | Big ideas and intuition first; broad rather than deep | "Why" questions, surprising facts |
+  2. **"How far do you want to go?"** Sets the syllabus's size and depth: a quick overview (a
+     few units on the key ideas, easier questions), solid working knowledge (a full syllabus
+     to confident everyday use), or deep expertise (advanced units and edge cases, harder
+     questions).
+  3. **"How much do you know already?"** Decides placement: new to this (no placement; start
+     at the beginning), the basics (placement from basics to intermediate), or knows it well
+     (placement from intermediate up).
+  4. **"Anything specific?"** Optional free text, e.g. "AP Calculus BC" or "a Discord bot".
+- **After placement, the plan is shown back** with a line saying why it looks that way
+  ("Exam-focused, 6 units, starting from functions since you know the basics").
+- **Placement:** a placement lesson, with an **"I don't know"** button counted as wrong so
+  learners don't guess their way too far ahead. Feedback after each answer is as in any
+  lesson. Placement has no syllabus, so it gives no evidence; its results go in the brief for
+  the run that writes the syllabus.
+- **Path screen:** the syllabus as a path of units with the next lesson highlighted, and a list
+  of topics to switch between.
 - **Removed:** the chat UI, typed-message endpoints, and resuming conversations (resume tokens,
   the session store, reopening sessions after a restart).
 
-### Step 4: steering
+### Step 5: steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More
   examples", "More real-world"), saved to the learner profile and in the next brief.
 - **Syllabus proposals:** a `propose_revision` tool whose change is shown as a card ("Add a unit
@@ -156,24 +195,10 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   short answer card. No follow-up questions, as in Duolingo. If the question reveals something
   lasting ("keeps confusing joins and unions"), the run writes a note.
 
-### Step 5: review
+### Step 6: review
 - Mastery per objective computed from evidence, shown on the path, deciding how much retries
   count compared with first attempts.
 - Review lessons that bring back weak or due objectives, scheduled by spaced repetition.
-
-## Open questions
-- **Existing data:** is anything in the local database worth migrating through the rename
-  (stored quizzes use `questions`, transcripts hold `create_quiz` calls), or can it be reset?
-- **Topics:** nothing defines a topic yet, and intake and placement happen before a syllabus
-  exists. A topic record (holding the profile answers, the syllabus once made and the next
-  lesson) is probably needed for the path screen and topic switching.
-- **Setup questions:** asking tap-to-answer questions needs a tool, e.g.
-  `ask_learner(question, options)`.
-- **Lesson purposes:** placement lessons measure rather than teach; should they have teach
-  cards or allow retries?
-- **Step 3's size:** it holds the run brief, intake, placement, the path screen, background
-  generation and removing the chat. One-off runs and background generation could be their own
-  step.
 
 ## Later, not yet scheduled
 - **LLM-graded free-text answers** with a rubric, for open-ended skills.
