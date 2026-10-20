@@ -16,7 +16,9 @@ from pupil_server.learning.quiz import (
     TextMatch,
     TextResponse,
     TrueFalse,
+    describe_attempt,
     grade_attempt,
+    learner_view,
 )
 from pupil_server.learning.syllabus import Syllabus
 
@@ -197,3 +199,51 @@ def test_responses_round_trip_through_json_by_kind(response):
     adapter = TypeAdapter(Response)
     restored = adapter.validate_json(adapter.dump_json(response))
     assert type(restored) is type(response) and restored == response
+
+
+def mixed_quiz() -> Quiz:
+    return Quiz(
+        id="quiz_1",
+        title="Mixed",
+        purpose="placement",
+        questions=[
+            choice("q1", correct=("b",)).model_copy(update={"explanation": "B is right"}),
+            TrueFalse(id="q2", prompt="p", difficulty=1, answer=True),
+            Numeric(id="q3", prompt="p", difficulty=1, answer=3, tolerance=0.5, unit="cm"),
+            TextMatch(id="q4", prompt="p", difficulty=1, accepted=["def"]),
+        ],
+    )
+
+
+def test_learner_view_leaves_out_answers_and_explanations():
+    view = learner_view(mixed_quiz())
+    shown = view.model_dump_json()
+    for secret in ("correct", "answer", "accepted", "tolerance", "explanation", "B is right"):
+        assert secret not in shown
+    q1, q2, q3, q4 = view.questions
+    assert [o.id for o in q1.options] == ["a", "b", "c"]
+    assert q1.multiple is False
+    assert q3.unit == "cm"
+    assert (q2.kind, q4.kind) == ("true_false", "text_match")
+
+
+def test_describe_attempt_says_what_the_learner_answered():
+    quiz = mixed_quiz()
+    attempt = QuizAttempt(
+        id="att_1",
+        quiz_id="quiz_1",
+        responses={
+            "q1": ChoiceResponse(option_ids=["a"]),
+            "q2": BoolResponse(value=True),
+            "q3": NumberResponse(value=5),
+        },
+        submitted_at=datetime.now(UTC),
+    )
+    described = describe_attempt(quiz, attempt, grade_attempt(quiz, attempt))
+    assert described.splitlines() == [
+        "The learner finished the quiz 'Mixed' (quiz_1): 1 of 4 right.",
+        "- q1: wrong, answered 'A'",
+        "- q2: right",
+        "- q3: wrong, answered 5 cm",
+        "- q4: wrong, skipped",
+    ]

@@ -1,27 +1,21 @@
-"""Agent tools for planning and assessing: syllabi, quizzes and the learner's answers.
+"""Agent tools for planning and assessing: syllabi and quizzes.
 
-The agent writes syllabi and quizzes, but never grades: it passes on what the learner answered
-and the code says what was right. Bad input comes back to the agent as an error result naming
-the problem, so it can correct itself.
+The agent writes syllabi and quizzes, but never grades or relays answers: the learner answers
+in the app's quiz screen, the code grades them, and the results reach the agent as a message.
+Bad input comes back to the agent as an error result naming the problem, so it can correct
+itself.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from pupil_server.agents.base import Tool, tool
 from pupil_server.db import Database, new_id
-from pupil_server.db.learning import (
-    AttemptRepo,
-    EvidenceRepo,
-    QuizRepo,
-    StaleRevision,
-    SyllabusRepo,
-)
-from pupil_server.learning.quiz import Question, Quiz, QuizAttempt, Response
+from pupil_server.db.learning import EvidenceRepo, QuizRepo, StaleRevision, SyllabusRepo
+from pupil_server.learning.quiz import Question, Quiz
 from pupil_server.learning.syllabus import Objective, Syllabus, Unit, objective_changes
 
 OBJECTIVE_ID_RULE = (
@@ -103,13 +97,6 @@ class QuizPlan(_Input):
     questions: list[Question] = Field(min_length=1)
 
 
-class Answers(_Input):
-    quiz_id: str
-    responses: dict[str, Response]
-    """Question id to the learner's answer, exactly as they gave it. Leave out skipped
-    questions; they count as wrong."""
-
-
 def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
     """Units with an id for every objective, new ones getting a fresh one."""
     return [
@@ -126,8 +113,7 @@ def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
 
 def learning_tools(db: Database, learner_id: str) -> list[Tool]:
     """The tools, acting for one learner."""
-    syllabi, quizzes, attempts = SyllabusRepo(db), QuizRepo(db), AttemptRepo(db)
-    evidence = EvidenceRepo(db)
+    syllabi, quizzes, evidence = SyllabusRepo(db), QuizRepo(db), EvidenceRepo(db)
 
     @tool(
         "create_syllabus",
@@ -223,8 +209,11 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
 
     @tool(
         "create_quiz",
-        "Create a quiz that code will grade, so every question needs an exact answer. Returns "
-        "the quiz id. Show the learner the questions, not the answers.",
+        "Create a quiz that code will grade, so every question needs an exact answer. Write "
+        "every question in this one call. The learner takes the quiz in the app's quiz screen "
+        "once you end your turn, so don't repeat its questions or answers in the chat; their "
+        "results come back to you as a message.",
+        hide_input=True,  # the arguments hold the answer key
     )
     async def create_quiz(plan: QuizPlan) -> dict[str, Any]:
         quiz = Quiz(
@@ -237,31 +226,4 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
         await quizzes.create(learner_id, quiz)
         return {"quiz_id": quiz.id}
 
-    @tool(
-        "submit_quiz_answers",
-        "Grade the learner's answers to a quiz and record them. Send their answers as given, "
-        "even wrong ones; never correct them first. Returns which questions were right.",
-    )
-    async def submit_quiz_answers(answers: Answers) -> dict[str, Any]:
-        attempt = QuizAttempt(
-            id=new_id("att"),
-            quiz_id=answers.quiz_id,
-            responses=answers.responses,
-            submitted_at=datetime.now(UTC),
-        )
-        results = await attempts.submit(learner_id, attempt)
-        return {
-            "attempt_id": attempt.id,
-            "correct": sum(r.correct for r in results),
-            "total": len(results),
-            "results": [{"question_id": r.question_id, "correct": r.correct} for r in results],
-        }
-
-    return [
-        create_syllabus,
-        revise_syllabus,
-        get_syllabus,
-        list_syllabi,
-        create_quiz,
-        submit_quiz_answers,
-    ]
+    return [create_syllabus, revise_syllabus, get_syllabus, list_syllabi, create_quiz]

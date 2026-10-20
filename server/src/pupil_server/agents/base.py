@@ -24,6 +24,9 @@ class Tool:
     description: str
     input_model: type[BaseModel]
     handler: Callable[[Any], Awaitable[ToolOutput]]
+    hide_input: bool = False
+    """Keep the agent's arguments from the learner, e.g. a quiz's answers. Only the app hides
+    them; the backend and the agent see them as usual."""
 
     def json_schema(self) -> dict[str, Any]:
         return self.input_model.model_json_schema()
@@ -41,7 +44,9 @@ class Tool:
         return ToolResult(id=call_id, output=output)
 
 
-def tool(name: str, description: str) -> Callable[[Callable[..., Awaitable[ToolOutput]]], Tool]:
+def tool(
+    name: str, description: str, *, hide_input: bool = False
+) -> Callable[[Callable[..., Awaitable[ToolOutput]]], Tool]:
     """Make a `Tool` from an async handler whose single parameter is a pydantic model."""
 
     def wrap(handler: Callable[..., Awaitable[ToolOutput]]) -> Tool:
@@ -50,7 +55,13 @@ def tool(name: str, description: str) -> Callable[[Callable[..., Awaitable[ToolO
         model = hints.get(params[0]) if len(params) == 1 else None
         if not (isinstance(model, type) and issubclass(model, BaseModel)):
             raise TypeError(f"tool {name!r}: handler must take one pydantic model argument")
-        return Tool(name=name, description=description, input_model=model, handler=handler)
+        return Tool(
+            name=name,
+            description=description,
+            input_model=model,
+            handler=handler,
+            hide_input=hide_input,
+        )
 
     return wrap
 

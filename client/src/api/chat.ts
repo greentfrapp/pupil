@@ -8,7 +8,17 @@ export type AgentEvent =
 
 // Mirrors pupil_server.conversations.transcript.TranscriptItem: agent events as they were
 // streamed, with each run of text merged into one text_delta.
-export type TranscriptItem = { type: 'user_message'; text: string } | AgentEvent
+export type TranscriptItem =
+  | { type: 'user_message'; text: string }
+  | {
+      type: 'quiz_results'
+      quiz_id: string
+      attempt_id: string
+      correct: number
+      total: number
+      text: string
+    }
+  | AgentEvent
 
 export interface Conversation {
   conversation_id: string
@@ -42,16 +52,33 @@ export async function releaseSession(id: string): Promise<void> {
 }
 
 /** Send one message and call `onEvent` for each event as it streams in. */
-export async function sendMessage(
+export function sendMessage(
   id: string,
   text: string,
   onEvent: (event: AgentEvent) => void,
 ): Promise<void> {
+  return streamTurn(`/api/conversations/${id}/messages`, { text }, onEvent)
+}
+
+/** Tell the agent how a quiz went, and stream its reply. */
+export function reportQuizResults(
+  id: string,
+  attemptId: string,
+  onEvent: (event: AgentEvent) => void,
+): Promise<void> {
+  return streamTurn(`/api/conversations/${id}/quiz-results`, { attempt_id: attemptId }, onEvent)
+}
+
+async function streamTurn(
+  url: string,
+  body: unknown,
+  onEvent: (event: AgentEvent) => void,
+): Promise<void> {
   // EventSource only does GET, so read the SSE stream from fetch directly.
-  const res = await fetch(`/api/conversations/${id}/messages`, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(body),
   })
   if (!res.ok || !res.body) throw await failure(res)
 

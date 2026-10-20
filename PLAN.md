@@ -18,7 +18,7 @@ The work is split into four branches. Each can be merged on its own and builds o
 | 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
 | 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged) |
 | 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Done (not merged) |
-| 5 | `quiz-ui` | Quiz-taking interface: quizzes served without answers, the answer key kept out of the chat stream, answers submitted by the UI, and results sent back to the agent | 3, 4 | Planned |
+| 5 | `quiz-ui` | Quiz-taking interface: quizzes served without answers, the answer key kept out of the chat stream, answers submitted by the UI, and results sent back to the agent | 3, 4 | Done (not merged) |
 
 ## Design: progress is kept separate from the syllabus
 
@@ -223,6 +223,25 @@ questions one at a time. (The tutor's prompt already asks for this.)
   type, which builds on step 4's transcripts.
 - **Client:** a quiz component with one screen per question type, and TypeScript types for the
   learner's view of a quiz and for results.
+- **As built:**
+  - `learner_view` (`learning/quiz.py`) lists the fields a learner may see, rather than
+    removing the answer fields, so an answer field added later stays hidden by default.
+  - Tools can set `hide_input`; `create_quiz` does. The conversation service blanks those
+    tools' inputs before streaming or saving them. Transcripts saved before this change may
+    still hold answer keys.
+  - **A quiz is answered once.** A second submission is refused (409), and `GET` returns the
+    results instead, so a reload shows the results rather than a fresh quiz. Results include
+    the learner's answer and the explanation, but not the correct answer, which the
+    explanation can give.
+  - **`submit_quiz_answers` is dropped,** so the agent can't record answers itself.
+  - `POST /api/conversations/{id}/quiz-results` takes an attempt id; the app writes the
+    message from the stored attempt (`describe_attempt`: the score, and what the learner
+    answered for each wrong question). It is saved as a `quiz_results` transcript item.
+  - Client: `QuizRunner.vue` opens from a Take the quiz button under the tutor's message.
+    It shows one question at a time and, after submitting, the results. Meanwhile the chat
+    reports them to the agent and streams its reply.
+  - **Not done:** replacing a quiz (`create_quiz(replaces=...)`) and correcting a wrong
+    answer key after an attempt, both discussed and deferred.
 
 ## Other gaps, not yet scheduled
 
