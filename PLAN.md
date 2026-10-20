@@ -141,8 +141,8 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
     `quiz_results` transcript item are gone.
   - Client: `LessonPlayer.vue` replaces `QuizRunner.vue`; the chat shows a Start the lesson
     button under `create_lesson`.
-  - Not verified: the player in a browser, and the updated billed live schema test (now
-    `create_lesson` with a teach card).
+  - The billed live test passes: Claude fills in `create_lesson`'s schema, teach card
+    included. Not verified: the player in a browser.
 
 ### Step 2: question types
 - Fill in the blank (typed or picked from a word bank), ordering (put steps in order) and
