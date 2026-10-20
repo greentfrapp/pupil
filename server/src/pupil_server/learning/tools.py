@@ -1,9 +1,9 @@
-"""Agent tools for planning and assessing: syllabi and quizzes.
+"""Agent tools for planning and teaching: syllabi and lessons.
 
-The agent writes syllabi and quizzes, but never grades or relays answers: the learner answers
-in the app's quiz screen, the code grades them, and the results reach the agent as a message.
-Bad input comes back to the agent as an error result naming the problem, so it can correct
-itself.
+The agent writes syllabi and lessons, but never grades or relays answers: the learner answers
+in the app's lesson player, the code grades them, and the agent reads the results when it
+needs them. Bad input comes back to the agent as an error result naming the problem, so it
+can correct itself.
 """
 
 from __future__ import annotations
@@ -14,8 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pupil_server.agents.base import Tool, tool
 from pupil_server.db import Database, new_id
-from pupil_server.db.learning import EvidenceRepo, QuizRepo, StaleRevision, SyllabusRepo
-from pupil_server.learning.quiz import Question, Quiz
+from pupil_server.db.learning import (
+    AttemptRepo,
+    EvidenceRepo,
+    LessonRepo,
+    StaleRevision,
+    SyllabusRepo,
+)
+from pupil_server.learning.lesson import Item, Lesson, describe_attempt
 from pupil_server.learning.syllabus import Objective, Syllabus, Unit, objective_changes
 
 OBJECTIVE_ID_RULE = (
@@ -86,15 +92,25 @@ class NoArgs(_Input):
     pass
 
 
-class QuizPlan(_Input):
+class LessonPlan(_Input):
     title: str
-    purpose: Literal["placement", "checkpoint"]
-    """placement: find the learner's level, usually before a syllabus exists. checkpoint: check
-    what they learned from a syllabus."""
+    purpose: Literal["placement", "lesson"]
+    """placement: find the learner's level, usually before a syllabus exists; no teach cards,
+    and it can't be retried. lesson: teach objectives from a syllabus."""
     syllabus_id: str | None = None
-    """Required for a checkpoint. With it, every question must list the objective ids it tests;
+    """Required for a lesson. With it, every question must list the objective ids it tests;
     without it, questions list none."""
-    questions: list[Question] = Field(min_length=1)
+    keep_order: bool = False
+    """Set when the questions build on each other. Otherwise they are shuffled each time the
+    lesson is taken, though never past a teach card."""
+    items: list[Item] = Field(min_length=1)
+    """Questions, and teach cards before the questions that use them. Item ids are short and
+    unique within the lesson."""
+
+
+class RecentResults(_Input):
+    limit: int = Field(default=5, ge=1, le=20)
+    """How many of the latest attempts to read."""
 
 
 def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
@@ -113,7 +129,8 @@ def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
 
 def learning_tools(db: Database, learner_id: str) -> list[Tool]:
     """The tools, acting for one learner."""
-    syllabi, quizzes, evidence = SyllabusRepo(db), QuizRepo(db), EvidenceRepo(db)
+    syllabi, lessons, evidence = SyllabusRepo(db), LessonRepo(db), EvidenceRepo(db)
+    attempts = AttemptRepo(db)
 
     @tool(
         "create_syllabus",
@@ -208,22 +225,45 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
         }
 
     @tool(
-        "create_quiz",
-        "Create a quiz that code will grade, so every question needs an exact answer. Write "
-        "every question in this one call. The learner takes the quiz in the app's quiz screen "
-        "once you end your turn, so don't repeat its questions or answers in the chat; their "
-        "results come back to you as a message.",
+        "create_lesson",
+        "Create a short lesson (1 to 3 minutes) that teaches mostly by asking. Code grades it, "
+        "so every question needs an exact answer. Teach inside the questions where you can, "
+        "e.g. 'In Python, // divides and rounds down. What is 7 // 2?'. Add a teach card only "
+        "before a brand-new idea, and rarely. After each answer the learner sees whether they "
+        "were right, the correct answer and the explanation, so keep explanations to a "
+        "sentence or two. Write the whole lesson in this one call. The learner takes it in the "
+        "app's lesson player, so don't repeat its questions or answers in the chat. Read how "
+        "they did with recent_results.",
         hide_input=True,  # the arguments hold the answer key
     )
-    async def create_quiz(plan: QuizPlan) -> dict[str, Any]:
-        quiz = Quiz(
-            id=new_id("quiz"),
-            title=plan.title,
-            purpose=plan.purpose,
-            syllabus_id=plan.syllabus_id,
-            questions=plan.questions,
-        )
-        await quizzes.create(learner_id, quiz)
-        return {"quiz_id": quiz.id}
+    async def create_lesson(plan: LessonPlan) -> dict[str, Any]:
+        lesson = Lesson(id=new_id("les"), **plan.model_dump())
+        await lessons.create(learner_id, lesson)
+        return {"lesson_id": lesson.id}
 
-    return [create_syllabus, revise_syllabus, get_syllabus, list_syllabi, create_quiz]
+    @tool(
+        "recent_results",
+        "Read how the learner did in their latest lesson attempts, newest first: their score, "
+        "and what they answered for each question they got wrong. A lesson can be retried, so "
+        "each attempt says which attempt at the lesson it was.",
+    )
+    async def recent_results(ask: RecentResults) -> dict[str, Any]:
+        described = []
+        for graded in await attempts.recent(learner_id, ask.limit):
+            lesson = await lessons.get(learner_id, graded.attempt.lesson_id)
+            described.append(
+                {
+                    "submitted_at": graded.attempt.submitted_at.isoformat(),
+                    "summary": describe_attempt(lesson, graded),
+                }
+            )
+        return {"attempts": described}
+
+    return [
+        create_syllabus,
+        revise_syllabus,
+        get_syllabus,
+        list_syllabi,
+        create_lesson,
+        recent_results,
+    ]

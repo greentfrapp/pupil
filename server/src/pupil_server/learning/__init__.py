@@ -1,1 +1,2 @@
-"""Learning domain: syllabi (the plan), quizzes (assessment) and progress (what the learner knows)."""
+"""Learning domain: syllabi (the plan), lessons (teaching and assessing) and progress (what the
+learner knows)."""

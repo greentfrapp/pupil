@@ -25,7 +25,7 @@ class Tool:
     input_model: type[BaseModel]
     handler: Callable[[Any], Awaitable[ToolOutput]]
     hide_input: bool = False
-    """Keep the agent's arguments from the learner, e.g. a quiz's answers. Only the app hides
+    """Keep the agent's arguments from the learner, e.g. a lesson's answers. Only the app hides
     them; the backend and the agent see them as usual."""
 
     def json_schema(self) -> dict[str, Any]:

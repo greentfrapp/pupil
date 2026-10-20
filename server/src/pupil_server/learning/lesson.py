@@ -1,10 +1,13 @@
-"""Quizzes: placement before a syllabus exists, checkpoints against one.
+"""Lessons: short runs of questions, with the odd teach card, that teach mostly by asking.
 
-Every question type is graded by code, never by a model, so results are reproducible.
+A placement lesson finds the learner's level, usually before a syllabus exists; every other
+lesson teaches objectives from a syllabus. Every question type is graded by code, never by a
+model, so results are reproducible.
 """
 
 from __future__ import annotations
 
+import random
 from collections import Counter
 from typing import Annotated, Literal
 
@@ -65,11 +68,12 @@ class QuestionBase(BaseModel):
     id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     objective_ids: list[str] = Field(default_factory=list)
-    """Syllabus objectives this question tests; required once the quiz is tied to a syllabus."""
+    """Syllabus objectives this question tests; required once the lesson is tied to a syllabus."""
     difficulty: int = Field(ge=1, le=5)
     """1 (easiest) to 5."""
-    explanation: str | None = None
-    """Shown to the learner after they answer."""
+    explanation: str = Field(min_length=1)
+    """One or two sentences on why the answer is right. Shown after the learner answers, right
+    or wrong, so a lucky guess still teaches."""
 
 
 class Option(BaseModel):
@@ -86,6 +90,9 @@ class MultipleChoice(QuestionBase):
     """Ids of the correct options."""
     multiple: bool = False
     """Whether the learner should pick every correct option rather than exactly one."""
+    keep_option_order: bool = False
+    """Set when the options only make sense in the order given, e.g. 'All of the above' or
+    ranges. Otherwise they are shuffled each time the lesson is taken."""
 
     @model_validator(mode="after")
     def _check_options(self) -> MultipleChoice:
@@ -109,6 +116,9 @@ class MultipleChoice(QuestionBase):
         chosen = _expect(self, response, ChoiceResponse).option_ids
         return set(chosen) == set(self.correct)
 
+    def answer_text(self) -> str:
+        return ", ".join(o.text for o in self.options if o.id in self.correct)
+
 
 class TrueFalse(QuestionBase):
     """A statement the learner says is true or false."""
@@ -118,6 +128,9 @@ class TrueFalse(QuestionBase):
 
     def grade(self, response: BaseModel) -> bool:
         return _expect(self, response, BoolResponse).value == self.answer
+
+    def answer_text(self) -> str:
+        return "True" if self.answer else "False"
 
 
 class Numeric(QuestionBase):
@@ -133,13 +146,22 @@ class Numeric(QuestionBase):
     def grade(self, response: BaseModel) -> bool:
         return abs(_expect(self, response, NumberResponse).value - self.answer) <= self.tolerance
 
+    def answer_text(self) -> str:
+        text = f"{self.answer:g}"
+        if self.unit:
+            text += f" {self.unit}"
+        if self.tolerance:
+            text += f" (± {self.tolerance:g})"
+        return text
+
 
 class TextMatch(QuestionBase):
     """Answered with a short text that must match an accepted answer."""
 
     kind: Literal["text_match"] = "text_match"
     accepted: list[str] = Field(min_length=1)
-    """Every answer that counts as right. Spacing, and case unless case_sensitive, are ignored."""
+    """Every answer that counts as right, the best one first: it is the one shown to the
+    learner. Spacing, and case unless case_sensitive, are ignored."""
     case_sensitive: bool = False
 
     @model_validator(mode="after")
@@ -156,27 +178,65 @@ class TextMatch(QuestionBase):
         given = self._normalize(_expect(self, response, TextResponse).text)
         return given in {self._normalize(a) for a in self.accepted}
 
+    def answer_text(self) -> str:
+        return self.accepted[0]
 
-Question = Annotated[MultipleChoice | TrueFalse | Numeric | TextMatch, Field(discriminator="kind")]
+
+AnyQuestion = MultipleChoice | TrueFalse | Numeric | TextMatch
+Question = Annotated[AnyQuestion, Field(discriminator="kind")]
 
 
-class Quiz(BaseModel):
+class TeachCard(BaseModel):
+    """A short piece of teaching, shown before the questions that use it."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
+    kind: Literal["teach_card"] = "teach_card"
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
-    purpose: Literal["placement", "checkpoint"]
+    text: str = Field(min_length=1)
+    """A few sentences introducing a brand-new idea that the questions after it build on."""
+
+
+Item = Annotated[AnyQuestion | TeachCard, Field(discriminator="kind")]
+
+
+class Lesson(BaseModel):
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    purpose: Literal["placement", "lesson"]
     syllabus_id: str | None = None
-    """None for a placement quiz written before any syllabus exists."""
-    questions: list[Question] = Field(min_length=1)
+    """None for a placement lesson written before any syllabus exists."""
+    keep_order: bool = False
+    """Set when the questions build on each other. Otherwise they are shuffled each time the
+    lesson is taken, though never past a teach card."""
+    items: list[Item] = Field(min_length=1)
+
+    @property
+    def questions(self) -> list[AnyQuestion]:
+        return [i for i in self.items if not isinstance(i, TeachCard)]
+
+    def question(self, question_id: str) -> AnyQuestion:
+        for q in self.questions:
+            if q.id == question_id:
+                return q
+        raise ValueError(f"no question {question_id!r} in lesson {self.id!r}")
 
     @model_validator(mode="after")
-    def _check_structure(self) -> Quiz:
-        ids = [q.id for q in self.questions]
+    def _check_structure(self) -> Lesson:
+        ids = [i.id for i in self.items]
         duplicates = sorted(i for i, n in Counter(ids).items() if n > 1)
         if duplicates:
-            raise ValueError(f"duplicate question ids: {duplicates}")
+            raise ValueError(f"duplicate item ids: {duplicates}")
+        if not self.questions:
+            raise ValueError("a lesson needs at least one question")
+        if self.purpose == "placement":
+            cards = [i.id for i in self.items if isinstance(i, TeachCard)]
+            if cards:
+                raise ValueError(f"a placement lesson measures, so has no teach cards: {cards}")
         if self.syllabus_id is None:
-            if self.purpose == "checkpoint":
-                raise ValueError("a checkpoint quiz needs a syllabus_id")
+            if self.purpose == "lesson":
+                raise ValueError("a lesson needs a syllabus_id; only placement comes before one")
             tagged = [q.id for q in self.questions if q.objective_ids]
             if tagged:
                 raise ValueError(f"questions tagged without a syllabus_id: {tagged}")
@@ -185,7 +245,7 @@ class Quiz(BaseModel):
     def check_tags(self, syllabus: Syllabus) -> None:
         """Every question must test at least one objective, and only ones the syllabus has."""
         if self.syllabus_id != syllabus.id:
-            raise ValueError(f"quiz is for syllabus {self.syllabus_id!r}, not {syllabus.id!r}")
+            raise ValueError(f"lesson is for syllabus {self.syllabus_id!r}, not {syllabus.id!r}")
         untagged = [q.id for q in self.questions if not q.objective_ids]
         if untagged:
             raise ValueError(f"questions without objective ids: {untagged}")
@@ -195,9 +255,11 @@ class Quiz(BaseModel):
             raise ValueError(f"objective ids not in syllabus {syllabus.id!r}: {unknown}")
 
 
-class QuizAttempt(BaseModel):
+class Attempt(BaseModel):
+    """One run through a lesson, submitted when the learner finishes it."""
+
     id: str = Field(min_length=1)
-    quiz_id: str
+    lesson_id: str
     responses: dict[str, Response]
     """Question id to the learner's response; unanswered questions are simply absent."""
     submitted_at: AwareDatetime
@@ -209,25 +271,37 @@ class QuestionResult(BaseModel):
     objective_ids: list[str]
 
 
-def grade_attempt(quiz: Quiz, attempt: QuizAttempt) -> list[QuestionResult]:
-    """One result per question, in quiz order. Unanswered questions count as incorrect."""
-    if attempt.quiz_id != quiz.id:
-        raise ValueError(f"attempt is for quiz {attempt.quiz_id!r}, not {quiz.id!r}")
-    unknown = sorted(attempt.responses.keys() - {q.id for q in quiz.questions})
+class GradedAttempt(BaseModel):
+    attempt: Attempt
+    number: int
+    """1 for the learner's first attempt at the lesson, 2 for the first retry, and so on."""
+    results: list[QuestionResult]
+    """One per question, in lesson order."""
+
+    @property
+    def correct(self) -> int:
+        return sum(r.correct for r in self.results)
+
+
+def grade_attempt(lesson: Lesson, attempt: Attempt) -> list[QuestionResult]:
+    """One result per question, in lesson order. Unanswered questions count as incorrect."""
+    if attempt.lesson_id != lesson.id:
+        raise ValueError(f"attempt is for lesson {attempt.lesson_id!r}, not {lesson.id!r}")
+    unknown = sorted(attempt.responses.keys() - {q.id for q in lesson.questions})
     if unknown:
-        raise ValueError(f"responses to questions not in quiz {quiz.id!r}: {unknown}")
+        raise ValueError(f"responses to questions not in lesson {lesson.id!r}: {unknown}")
     return [
         QuestionResult(
             question_id=q.id,
             correct=q.id in attempt.responses and q.grade(attempt.responses[q.id]),
             objective_ids=q.objective_ids,
         )
-        for q in quiz.questions
+        for q in lesson.questions
     ]
 
 
-# The learner's view: what a quiz screen may show before the quiz is answered. Fields are
-# listed rather than copied, so an answer field added to a question later stays hidden.
+# The learner's view: what the lesson player may show before a question is answered. Fields
+# are listed rather than copied, so an answer field added to a question later stays hidden.
 
 
 class QuestionView(BaseModel):
@@ -242,35 +316,68 @@ class QuestionView(BaseModel):
     """For numeric."""
 
 
-class QuizView(BaseModel):
+class TeachCardView(BaseModel):
+    kind: Literal["teach_card"] = "teach_card"
     id: str
     title: str
-    purpose: Literal["placement", "checkpoint"]
-    questions: list[QuestionView]
+    text: str
 
 
-def learner_view(quiz: Quiz) -> QuizView:
-    """The quiz without its answers or explanations."""
-    questions = []
-    for q in quiz.questions:
-        view = QuestionView(kind=q.kind, id=q.id, prompt=q.prompt)
-        if isinstance(q, MultipleChoice):
-            view.options, view.multiple = q.options, q.multiple
-        elif isinstance(q, Numeric):
-            view.unit = q.unit
-        questions.append(view)
-    return QuizView(id=quiz.id, title=quiz.title, purpose=quiz.purpose, questions=questions)
+class LessonView(BaseModel):
+    id: str
+    title: str
+    purpose: Literal["placement", "lesson"]
+    items: list[QuestionView | TeachCardView]
 
 
-def describe_attempt(quiz: Quiz, attempt: QuizAttempt, results: list[QuestionResult]) -> str:
+def learner_view(lesson: Lesson, rng: random.Random | None = None) -> LessonView:
+    """The lesson without its answers or explanations, shuffled if given `rng`.
+
+    Questions are shuffled only between teach cards, so a card still comes before the
+    questions that use it, and not at all when the lesson keeps its order. Options are
+    shuffled unless the question keeps their order.
+    """
+    items = list(lesson.items) if rng is None else _shuffled_items(lesson, rng)
+    views: list[QuestionView | TeachCardView] = []
+    for item in items:
+        if isinstance(item, TeachCard):
+            views.append(TeachCardView(id=item.id, title=item.title, text=item.text))
+            continue
+        view = QuestionView(kind=item.kind, id=item.id, prompt=item.prompt)
+        if isinstance(item, MultipleChoice):
+            options = list(item.options)
+            if rng is not None and not item.keep_option_order:
+                rng.shuffle(options)
+            view.options, view.multiple = options, item.multiple
+        elif isinstance(item, Numeric):
+            view.unit = item.unit
+        views.append(view)
+    return LessonView(id=lesson.id, title=lesson.title, purpose=lesson.purpose, items=views)
+
+
+def _shuffled_items(lesson: Lesson, rng: random.Random) -> list[AnyQuestion | TeachCard]:
+    if lesson.keep_order:
+        return list(lesson.items)
+    shuffled: list[AnyQuestion | TeachCard] = []
+    run: list[AnyQuestion | TeachCard] = []  # questions since the last card
+    for item in lesson.items:
+        if isinstance(item, TeachCard):
+            rng.shuffle(run)
+            shuffled += [*run, item]
+            run = []
+        else:
+            run.append(item)
+    rng.shuffle(run)
+    return shuffled + run
+
+
+def describe_attempt(lesson: Lesson, graded: GradedAttempt) -> str:
     """The results in words, for the agent: what was right, and what the learner answered."""
-    questions = {q.id: q for q in quiz.questions}
-    right = sum(r.correct for r in results)
-    lines = [
-        f"The learner finished the quiz {quiz.title!r} ({quiz.id}): {right} of {len(results)} right."
-    ]
-    for r in results:
-        response = attempt.responses.get(r.question_id)
+    questions = {q.id: q for q in lesson.questions}
+    score = f"{graded.correct} of {len(graded.results)} right"
+    lines = [f"{lesson.title!r} ({lesson.id}), attempt {graded.number}: {score}."]
+    for r in graded.results:
+        response = graded.attempt.responses.get(r.question_id)
         if r.correct:
             lines.append(f"- {r.question_id}: right")
         elif response is None:

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Objective(BaseModel):
-    """One thing the learner should be able to do; quiz questions are tagged with these ids."""
+    """One thing the learner should be able to do; lesson questions are tagged with these ids."""
 
     id: str = Field(min_length=1)
     text: str = Field(min_length=1)

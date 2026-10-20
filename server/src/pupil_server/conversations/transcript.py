@@ -19,23 +19,11 @@ class UserMessage(BaseModel):
     text: str
 
 
-class QuizResults(BaseModel):
-    """A finished quiz, reported to the agent by the app rather than typed by the learner."""
-
-    type: Literal["quiz_results"] = "quiz_results"
-    quiz_id: str
-    attempt_id: str
-    correct: int
-    total: int
-    text: str
-    """What the agent was told."""
-
-
-Prompt = UserMessage | QuizResults
+Prompt = UserMessage
 """What starts a turn."""
 
 TranscriptItem = Annotated[
-    UserMessage | QuizResults | TextDelta | ToolCall | ToolResult | TurnComplete | AgentError,
+    UserMessage | TextDelta | ToolCall | ToolResult | TurnComplete | AgentError,
     Field(discriminator="type"),
 ]
 

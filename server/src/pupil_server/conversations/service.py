@@ -79,7 +79,7 @@ class Conversations:
     ) -> AsyncIterator[AgentEvent]:
         """Run one turn, saving it to the transcript as it goes.
 
-        Arguments of tools that hide their input (a quiz's answer key) are left out of both
+        Arguments of tools that hide their input (a lesson's answer key) are left out of both
         the stream and the transcript.
         """
         hidden = {t.name for t in self._config(learner_id).tools if t.hide_input}

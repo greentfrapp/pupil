@@ -6,8 +6,8 @@ import pytest
 
 from pupil_server.agents import ToolResult
 from pupil_server.db import LOCAL_LEARNER, Database
-from pupil_server.db.learning import AttemptRepo, QuizRepo, SyllabusRepo
-from pupil_server.learning.quiz import QuizAttempt
+from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
+from pupil_server.learning.lesson import Attempt, NumberResponse, TeachCard
 from pupil_server.learning.tools import learning_tools
 
 
@@ -46,10 +46,18 @@ QUESTIONS = [
         "id": "q1",
         "prompt": "Which keyword defines a function?",
         "difficulty": 1,
+        "explanation": "def is short for define.",
         "options": [{"id": "a", "text": "def"}, {"id": "b", "text": "fun"}],
         "correct": ["a"],
     },
-    {"kind": "numeric", "id": "q2", "prompt": "len('abc')?", "difficulty": 1, "answer": 3},
+    {
+        "kind": "numeric",
+        "id": "q2",
+        "prompt": "len('abc')?",
+        "difficulty": 1,
+        "explanation": "Three characters.",
+        "answer": 3,
+    },
 ]
 
 
@@ -67,19 +75,27 @@ def objective_id(syllabus: dict, unit_id: str) -> str:
     return unit["objectives"][0]["id"]
 
 
-async def practise(call, db: Database, syllabus: dict, unit_id: str) -> None:
-    """Give the learner evidence on a unit's objective."""
-    quiz = await call(
-        "create_quiz",
-        title="Checkpoint",
-        purpose="checkpoint",
+async def create_lesson(call, syllabus: dict, unit_id: str) -> str:
+    created = await call(
+        "create_lesson",
+        title="Basics",
+        purpose="lesson",
         syllabus_id=syllabus["id"],
-        questions=tagged(objective_id(syllabus, unit_id)),
+        items=tagged(objective_id(syllabus, unit_id)),
     )
-    attempt = QuizAttempt(
-        id="att_1", quiz_id=quiz.output["quiz_id"], responses={}, submitted_at=datetime.now(UTC)
+    return created.output["lesson_id"]
+
+
+async def take(db: Database, lesson_id: str, attempt_id: str = "att_1", **responses) -> None:
+    attempt = Attempt(
+        id=attempt_id, lesson_id=lesson_id, responses=responses, submitted_at=datetime.now(UTC)
     )
     await AttemptRepo(db).submit(LOCAL_LEARNER, attempt)
+
+
+async def practise(call, db: Database, syllabus: dict, unit_id: str) -> None:
+    """Give the learner evidence on a unit's objective."""
+    await take(db, await create_lesson(call, syllabus, unit_id))
 
 
 async def revise(call, syllabus: dict, units: list[dict], **extra: Any) -> ToolResult:
@@ -222,29 +238,62 @@ async def test_get_and_list_syllabi(call):
     assert "no syllabus 'syl_nope'" in missing.output
 
 
-# Quizzes
+# Lessons
+
+CARD = {"kind": "teach_card", "id": "c1", "title": "Functions", "text": "def names a function."}
 
 
-async def test_create_quiz_assigns_the_id_and_checks_tags(call, db: Database):
+async def test_create_lesson_stores_it_with_an_assigned_id(call, db: Database):
     syllabus = await create(call)
-
     created = await call(
-        "create_quiz",
-        title="Checkpoint",
-        purpose="checkpoint",
+        "create_lesson",
+        title="Functions",
+        purpose="lesson",
         syllabus_id=syllabus["id"],
-        questions=tagged(objective_id(syllabus, "basics")),
+        keep_order=True,
+        items=[CARD, *tagged(objective_id(syllabus, "basics"))],
     )
-    quiz_id = created.output["quiz_id"]
-    assert quiz_id.startswith("quiz_")
-    assert (await QuizRepo(db).get(LOCAL_LEARNER, quiz_id)).syllabus_id == syllabus["id"]
+    lesson_id = created.output["lesson_id"]
+    assert lesson_id.startswith("les_")
 
+    stored = await LessonRepo(db).get(LOCAL_LEARNER, lesson_id)
+    assert stored.syllabus_id == syllabus["id"]
+    assert stored.keep_order
+    assert isinstance(stored.items[0], TeachCard)
+    assert [q.id for q in stored.questions] == ["q1", "q2"]
+
+
+async def test_create_lesson_checks_tags(call):
+    syllabus = await create(call)
     bad = await call(
-        "create_quiz",
-        title="Checkpoint",
-        purpose="checkpoint",
+        "create_lesson",
+        title="Functions",
+        purpose="lesson",
         syllabus_id=syllabus["id"],
-        questions=tagged("obj_unknown"),
+        items=tagged("obj_unknown"),
     )
     assert bad.is_error
     assert "objective ids not in syllabus" in bad.output
+
+
+async def test_an_invalid_lesson_comes_back_as_an_error(call):
+    result = await call(
+        "create_lesson", title="Placement", purpose="placement", items=[CARD, *QUESTIONS]
+    )
+    assert result.is_error
+    assert "a placement lesson measures, so has no teach cards" in result.output
+
+
+async def test_recent_results_describe_the_latest_attempts(call, db: Database):
+    syllabus = await create(call)
+    lesson_id = await create_lesson(call, syllabus, "basics")
+    await take(db, lesson_id, "att_1", q2=NumberResponse(value=4))
+    await take(db, lesson_id, "att_2", q2=NumberResponse(value=3))
+
+    result = await call("recent_results", limit=1)
+    [latest] = result.output["attempts"]
+    assert latest["summary"].splitlines() == [
+        f"'Basics' ({lesson_id}), attempt 2: 1 of 2 right.",
+        "- q1: wrong, skipped",
+        "- q2: right",
+    ]

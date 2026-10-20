@@ -234,21 +234,28 @@ def test_tutor_tools_write_to_the_apps_database(tmp_path: Path):
     assert [s.topic for s in stored] == ["Python"]
 
 
-QUIZ_PLAN = {
+PLACEMENT = {
     "title": "Placement",
     "purpose": "placement",
-    "questions": [
-        {"kind": "true_false", "id": "q1", "prompt": "p", "difficulty": 1, "answer": True}
+    "items": [
+        {
+            "kind": "true_false",
+            "id": "q1",
+            "prompt": "p",
+            "difficulty": 1,
+            "explanation": "e",
+            "answer": True,
+        }
     ],
 }
 
 
-def test_the_quiz_answer_key_stays_out_of_the_stream_and_transcript(tmp_path: Path):
-    backend = FakeBackend([[Call("create_quiz", QUIZ_PLAN)]])
+def test_the_lesson_answer_key_stays_out_of_the_stream_and_transcript(tmp_path: Path):
+    backend = FakeBackend([[Call("create_lesson", PLACEMENT)]])
     app = create_app(Settings(), db_path=tmp_path / "t.db", agent_backend=backend)
     with TestClient(app) as c:
         conversation_id = start(c)
-        events = say(c, conversation_id, "quiz me")
+        events = say(c, conversation_id, "test me")
         items = transcript(c, conversation_id)
 
     streamed = next(e for e in events if e["type"] == "tool_call")
@@ -256,34 +263,4 @@ def test_the_quiz_answer_key_stays_out_of_the_stream_and_transcript(tmp_path: Pa
     assert streamed["input"] == {}
     assert saved["input"] == {}
     result = next(e for e in events if e["type"] == "tool_result")
-    assert result["output"]["quiz_id"].startswith("quiz_")  # how the client finds the quiz
-
-
-def test_quiz_results_are_reported_to_the_agent(tmp_path: Path):
-    backend = FakeBackend([[Call("create_quiz", QUIZ_PLAN)], [Say("Well done")]])
-    app = create_app(Settings(), db_path=tmp_path / "t.db", agent_backend=backend)
-    with TestClient(app) as c:
-        conversation_id = start(c)
-        events = say(c, conversation_id, "quiz me")
-        quiz_id = next(e for e in events if e["type"] == "tool_result")["output"]["quiz_id"]
-        attempt = c.post(
-            f"/api/quizzes/{quiz_id}/attempts",
-            json={"responses": {"q1": {"kind": "bool", "value": True}}},
-        ).json()
-
-        url = f"/api/conversations/{conversation_id}/quiz-results"
-        res = c.post(url, json={"attempt_id": attempt["attempt_id"]})
-        assert _events(res.text)[-1]["type"] == "turn_complete"
-        items = transcript(c, conversation_id)
-        missing = c.post(url, json={"attempt_id": "att_nope"})
-
-    told = backend.sessions[0].received[-1]
-    assert (
-        told
-        == "The learner finished the quiz 'Placement' (" + quiz_id + "): 1 of 1 right.\n- q1: right"
-    )
-    reported = next(i for i in items if i["type"] == "quiz_results")
-    assert reported["attempt_id"] == attempt["attempt_id"]
-    assert (reported["correct"], reported["total"]) == (1, 1)
-    assert reported["text"] == told
-    assert missing.status_code == 404
+    assert result["output"]["lesson_id"].startswith("les_")  # how the client finds the lesson

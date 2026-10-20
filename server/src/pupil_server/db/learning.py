@@ -1,4 +1,4 @@
-"""Repositories for syllabi, quizzes and attempts, and the evidence attempts give.
+"""Repositories for syllabi, lessons and attempts, and the evidence attempts give.
 
 Every method takes the learner it acts for, and only sees that learner's records: another
 learner's id is simply not found.
@@ -10,8 +10,14 @@ import sqlite3
 from datetime import UTC, datetime
 
 from pupil_server.db.database import AlreadyExists, Database, NotFound, timestamp
+from pupil_server.learning.lesson import (
+    Attempt,
+    GradedAttempt,
+    Lesson,
+    QuestionResult,
+    grade_attempt,
+)
 from pupil_server.learning.progress import Evidence
-from pupil_server.learning.quiz import QuestionResult, Quiz, QuizAttempt, grade_attempt
 from pupil_server.learning.syllabus import Syllabus
 
 
@@ -19,8 +25,8 @@ class StaleRevision(ValueError):
     """A syllabus change was based on a revision that is no longer the latest."""
 
 
-class AlreadyAnswered(ValueError):
-    """The quiz has an attempt already; each quiz is answered once."""
+class PlacementTaken(ValueError):
+    """A placement lesson is taken once; redoing placement means starting the topic again."""
 
 
 class SyllabusRepo:
@@ -95,111 +101,122 @@ class SyllabusRepo:
         return await self._db.run(work)
 
 
-class QuizRepo:
+class LessonRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def create(self, learner_id: str, quiz: Quiz) -> None:
-        """Store a quiz. One tied to a syllabus must tag only objectives its latest revision has."""
+    async def create(self, learner_id: str, lesson: Lesson) -> None:
+        """Store a lesson. One tied to a syllabus must tag only objectives its latest revision
+        has."""
 
         def work(conn: sqlite3.Connection) -> None:
-            if conn.execute("SELECT 1 FROM quizzes WHERE id = ?", (quiz.id,)).fetchone():
-                raise AlreadyExists(f"quiz {quiz.id!r} already exists")
-            if quiz.syllabus_id is not None:
-                quiz.check_tags(_latest_syllabus(conn, learner_id, quiz.syllabus_id))
+            if conn.execute("SELECT 1 FROM lessons WHERE id = ?", (lesson.id,)).fetchone():
+                raise AlreadyExists(f"lesson {lesson.id!r} already exists")
+            if lesson.syllabus_id is not None:
+                lesson.check_tags(_latest_syllabus(conn, learner_id, lesson.syllabus_id))
             conn.execute(
-                "INSERT INTO quizzes (id, learner_id, syllabus_id, body, created_at) "
+                "INSERT INTO lessons (id, learner_id, syllabus_id, body, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (quiz.id, learner_id, quiz.syllabus_id, quiz.model_dump_json(), _now()),
+                (lesson.id, learner_id, lesson.syllabus_id, lesson.model_dump_json(), _now()),
             )
 
         await self._db.run(work)
 
-    async def get(self, learner_id: str, quiz_id: str) -> Quiz:
-        return await self._db.run(lambda conn: _quiz(conn, learner_id, quiz_id))
+    async def get(self, learner_id: str, lesson_id: str) -> Lesson:
+        return await self._db.run(lambda conn: _lesson(conn, learner_id, lesson_id))
 
 
 class AttemptRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def submit(self, learner_id: str, attempt: QuizAttempt) -> list[QuestionResult]:
+    async def submit(self, learner_id: str, attempt: Attempt) -> GradedAttempt:
         """Grade an attempt and store it with its results, all or nothing.
 
-        A quiz is answered once, so a second attempt at it is refused. For a quiz tied to a
-        syllabus, each result also becomes evidence for every objective its question tests.
+        Attempts at a lesson are numbered from 1; a placement lesson can't be retried. For a
+        lesson tied to a syllabus, each result also becomes evidence for every objective its
+        question tests.
         """
 
-        def work(conn: sqlite3.Connection) -> list[QuestionResult]:
-            quiz = _quiz(conn, learner_id, attempt.quiz_id)
+        def work(conn: sqlite3.Connection) -> GradedAttempt:
+            lesson = _lesson(conn, learner_id, attempt.lesson_id)
             if conn.execute("SELECT 1 FROM attempts WHERE id = ?", (attempt.id,)).fetchone():
                 raise AlreadyExists(f"attempt {attempt.id!r} already exists")
-            # Checked in the same transaction as the insert, so two submissions can't both pass.
-            if conn.execute("SELECT 1 FROM attempts WHERE quiz_id = ?", (quiz.id,)).fetchone():
-                raise AlreadyAnswered(f"quiz {quiz.id!r} has already been answered")
-            results = grade_attempt(quiz, attempt)
+            results = grade_attempt(lesson, attempt)
+            # Counted in the same transaction as the insert, so two submissions can't share
+            # a number.
+            earlier = conn.execute(
+                "SELECT count(*) FROM attempts WHERE lesson_id = ?", (lesson.id,)
+            ).fetchone()[0]
+            if lesson.purpose == "placement" and earlier:
+                raise PlacementTaken(f"placement lesson {lesson.id!r} has already been taken")
+            number = earlier + 1
             at = timestamp(attempt.submitted_at)
             conn.execute(
-                "INSERT INTO attempts (id, learner_id, quiz_id, body, submitted_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (attempt.id, learner_id, quiz.id, attempt.model_dump_json(), at),
+                "INSERT INTO attempts (id, learner_id, lesson_id, number, body, submitted_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (attempt.id, learner_id, lesson.id, number, attempt.model_dump_json(), at),
             )
             conn.executemany(
                 "INSERT INTO question_results (attempt_id, question_id, correct) VALUES (?, ?, ?)",
                 [(attempt.id, r.question_id, r.correct) for r in results],
             )
-            if quiz.syllabus_id is not None:
+            if lesson.syllabus_id is not None:
                 conn.executemany(
                     "INSERT INTO evidence (learner_id, syllabus_id, objective_id, attempt_id, "
-                    "question_id, correct, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "attempt_number, question_id, correct, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     [
-                        (learner_id, quiz.syllabus_id, o, attempt.id, r.question_id, r.correct, at)
+                        (
+                            learner_id,
+                            lesson.syllabus_id,
+                            o,
+                            attempt.id,
+                            number,
+                            r.question_id,
+                            r.correct,
+                            at,
+                        )
                         for r in results
                         for o in r.objective_ids
                     ],
                 )
-            return results
+            return GradedAttempt(attempt=attempt, number=number, results=results)
 
         return await self._db.run(work)
 
-    async def get(self, learner_id: str, attempt_id: str) -> QuizAttempt:
-        def work(conn: sqlite3.Connection) -> QuizAttempt:
-            return QuizAttempt.model_validate_json(
-                _attempt_row(conn, learner_id, attempt_id)["body"]
-            )
-
-        return await self._db.run(work)
-
-    async def results(self, learner_id: str, attempt_id: str) -> list[QuestionResult]:
-        """The stored results, in quiz order."""
-
-        def work(conn: sqlite3.Connection) -> list[QuestionResult]:
-            quiz = _quiz(conn, learner_id, _attempt_row(conn, learner_id, attempt_id)["quiz_id"])
-            correct = dict(
-                conn.execute(
-                    "SELECT question_id, correct FROM question_results WHERE attempt_id = ?",
-                    (attempt_id,),
-                ).fetchall()
-            )
-            return [
-                QuestionResult(
-                    question_id=q.id, correct=correct[q.id], objective_ids=q.objective_ids
-                )
-                for q in quiz.questions
-            ]
-
-        return await self._db.run(work)
-
-    async def for_quiz(self, learner_id: str, quiz_id: str) -> QuizAttempt | None:
-        """The learner's attempt at the quiz, or None if they haven't answered it yet."""
-
-        def work(conn: sqlite3.Connection) -> QuizAttempt | None:
-            _quiz(conn, learner_id, quiz_id)
+    async def get(self, learner_id: str, attempt_id: str) -> GradedAttempt:
+        def work(conn: sqlite3.Connection) -> GradedAttempt:
             row = conn.execute(
-                "SELECT body FROM attempts WHERE learner_id = ? AND quiz_id = ?",
-                (learner_id, quiz_id),
+                f"{_ATTEMPTS} WHERE learner_id = ? AND id = ?", (learner_id, attempt_id)
             ).fetchone()
-            return QuizAttempt.model_validate_json(row["body"]) if row else None
+            if row is None:
+                raise NotFound(f"no attempt {attempt_id!r}")
+            return _graded(conn, learner_id, row)
+
+        return await self._db.run(work)
+
+    async def for_lesson(self, learner_id: str, lesson_id: str) -> list[GradedAttempt]:
+        """The learner's attempts at the lesson, first attempt first."""
+
+        def work(conn: sqlite3.Connection) -> list[GradedAttempt]:
+            _lesson(conn, learner_id, lesson_id)
+            rows = conn.execute(
+                f"{_ATTEMPTS} WHERE learner_id = ? AND lesson_id = ? ORDER BY number",
+                (learner_id, lesson_id),
+            )
+            return [_graded(conn, learner_id, r) for r in rows.fetchall()]
+
+        return await self._db.run(work)
+
+    async def recent(self, learner_id: str, limit: int) -> list[GradedAttempt]:
+        """The learner's latest attempts at any lesson, newest first."""
+
+        def work(conn: sqlite3.Connection) -> list[GradedAttempt]:
+            rows = conn.execute(
+                f"{_ATTEMPTS} WHERE learner_id = ? ORDER BY submitted_at DESC, rowid DESC LIMIT ?",
+                (learner_id, limit),
+            )
+            return [_graded(conn, learner_id, r) for r in rows.fetchall()]
 
         return await self._db.run(work)
 
@@ -213,7 +230,8 @@ class EvidenceRepo:
 
         def work(conn: sqlite3.Connection) -> list[Evidence]:
             rows = conn.execute(
-                "SELECT objective_id, attempt_id, question_id, correct, at FROM evidence "
+                "SELECT objective_id, attempt_id, attempt_number, question_id, correct, at "
+                "FROM evidence "
                 "WHERE learner_id = ? AND syllabus_id = ? ORDER BY at, rowid",
                 (learner_id, syllabus_id),
             )
@@ -248,20 +266,31 @@ def _insert_syllabus(conn: sqlite3.Connection, learner_id: str, syllabus: Syllab
     )
 
 
-def _quiz(conn: sqlite3.Connection, learner_id: str, quiz_id: str) -> Quiz:
+def _lesson(conn: sqlite3.Connection, learner_id: str, lesson_id: str) -> Lesson:
     row = conn.execute(
-        "SELECT body FROM quizzes WHERE learner_id = ? AND id = ?", (learner_id, quiz_id)
+        "SELECT body FROM lessons WHERE learner_id = ? AND id = ?", (learner_id, lesson_id)
     ).fetchone()
     if row is None:
-        raise NotFound(f"no quiz {quiz_id!r}")
-    return Quiz.model_validate_json(row["body"])
+        raise NotFound(f"no lesson {lesson_id!r}")
+    return Lesson.model_validate_json(row["body"])
 
 
-def _attempt_row(conn: sqlite3.Connection, learner_id: str, attempt_id: str) -> sqlite3.Row:
-    row = conn.execute(
-        "SELECT quiz_id, body FROM attempts WHERE learner_id = ? AND id = ?",
-        (learner_id, attempt_id),
-    ).fetchone()
-    if row is None:
-        raise NotFound(f"no attempt {attempt_id!r}")
-    return row
+_ATTEMPTS = "SELECT id, lesson_id, number, body FROM attempts"
+
+
+def _graded(conn: sqlite3.Connection, learner_id: str, row: sqlite3.Row) -> GradedAttempt:
+    """An attempt row with its stored results, in lesson order."""
+    lesson = _lesson(conn, learner_id, row["lesson_id"])
+    correct = dict(
+        conn.execute(
+            "SELECT question_id, correct FROM question_results WHERE attempt_id = ?", (row["id"],)
+        ).fetchall()
+    )
+    return GradedAttempt(
+        attempt=Attempt.model_validate_json(row["body"]),
+        number=row["number"],
+        results=[
+            QuestionResult(question_id=q.id, correct=correct[q.id], objective_ids=q.objective_ids)
+            for q in lesson.questions
+        ],
+    )
