@@ -32,16 +32,28 @@ proposals and short answers.
   reach the client before the learner answers.
 
 ### New
-- **No chat. The agent works behind the screens.** Each topic keeps one agent conversation as
-  its hidden working log. Learner actions (finishing a lesson, giving feedback, asking about a
-  question) are sent to it as structured messages, like `quiz_results` today. The agent replies
-  with tool calls (`create_lesson`, `propose_revision`, …); its prose isn't shown, except
-  where a screen asks for text, such as an answer to "Ask about this".
+- **No chat, and no long-running conversation.** Each job the agent does is a fresh, one-off
+  run: intake, planning the syllabus, the next lesson, answering "Ask about this". A run gets
+  instructions for its job, a short brief built from the database, and the tools it needs.
+  Nothing is resumed, so cost per lesson stays flat, restarts don't matter, and runs don't
+  queue behind each other. Runs are logged for debugging but never replayed to the agent.
+- **What the agent knows comes from the database:** the syllabus, evidence (and mastery, from
+  step 5), past lessons and their results, a **learner profile** (goal, level, time per day,
+  preferences from intake and feedback) and **notes** the agent writes with a tool ("prefers
+  real-world examples"). Anything from free text must be written down this way, or it's
+  forgotten.
 - **Teach through questions.** The default is to teach inside the question ("In Python, `//`
-  divides and rounds down. What is `7 // 2`?"), with the explanation after a wrong answer as a
-  tiny lesson. A one-screen **teach card** is allowed before a brand-new concept, sparingly.
-- **Duolingo-style feedback:** each answer is checked as soon as it is given, and questions
-  answered wrongly come back at the end of the lesson.
+  divides and rounds down. What is `7 // 2`?"). A one-screen **teach card** is allowed before
+  a brand-new concept, sparingly.
+- **Duolingo-style lessons:** a lesson takes 1–3 minutes. After each question the learner sees
+  whether they were right, the correct answer and a short explanation; a question is never
+  retried on its own. Once a lesson is finished it can be retried as a whole, rerunning the
+  same questions shuffled where order doesn't matter, so nothing is generated again. Quitting
+  part-way means starting again; there is nothing to resume. We don't try hard to stop
+  learners gaming lessons; it only hurts their own learning.
+- **Results are pulled by the agent, not pushed to it.** Finishing a lesson doesn't start an
+  agent run. Results are read when the agent next has a job, such as preparing a lesson or
+  revising the syllabus, so it sees everything since its last run at once.
 - **Learners steer by tapping, not typing:** setup questions, one-tap lesson feedback, and
   syllabus changes proposed as cards to accept or skip. The one free-text box is "Ask about
   this", tied to the question or explanation on screen.
@@ -55,6 +67,7 @@ proposals and short answers.
 | Generated answer keys can be wrong | "Report a problem" and answer-key correction (later); maybe a second model check at creation |
 | Lots of quick questions can stay shallow | "Why?" questions, interleaving, spaced review (step 5) |
 | Generating a lesson takes seconds to tens of seconds | Generate the next lesson in the background (step 3) |
+| The agent only knows what the brief and notes tell it | Keep the brief complete but bounded; review what it holds as steps land |
 | Physical skills | Quizzes cover the theory only; accepted |
 
 ## Roadmap
@@ -63,9 +76,9 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
-| 1 | `lessons` | Lessons made of questions and teach cards; checking each answer as it's given; wrongly answered questions repeated; a lesson player replacing the quiz modal | — | Not started |
+| 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Not started |
 | 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Not started |
-| 3 | `topic-path` | Topic intake (one line plus tap-to-answer setup questions), placement, a path screen showing the syllabus, and the next lesson generated in the background. Removes the chat. | 1 | Not started |
+| 3 | `topic-path` | One-off agent runs with a brief, learner profile and notes; topic intake, placement, a path screen and the next lesson generated in the background. Removes the chat and resuming conversations. | 1 | Not started |
 | 4 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 3 | Not started |
 | 5 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 3 | Not started |
 
@@ -74,46 +87,93 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   items, each a question (the existing union) or a teach card (title, short text). Placement
   and checkpoint quizzes become lessons without teach cards, so grading, attempts, evidence and
   the learner view carry over. The rename covers the `quizzes` table, the API and the tools.
-  Stored quizzes keep `questions` rather than `items`, so a migration rewrites them or the
-  model still accepts the old shape when loading.
-- **Per-answer checking:** the answer key can't go to the client, so the player sends each
-  answer to the server and gets back right/wrong plus the explanation. The attempt is final
-  when the lesson ends.
-- **Every try counts as evidence,** so improvement shows. Each piece of evidence records
-  whether it was the first try or a repeat within the lesson: a repeat comes just after the
-  explanation, so it shows recall more than learning. How much each kind counts towards
-  mastery is decided in step 5.
+- **Taking a lesson:** the player sends each answer to a check endpoint, which grades it
+  without storing anything and returns whether it was right, the correct answer and the
+  explanation. When the lesson ends, the player submits all the answers as one attempt, as
+  quizzes do today. A quit lesson stores nothing.
+- **Correct answers for the learner:** each question type describes its answer for display:
+  the correct option(s), the number with its unit, or the first accepted text.
+- **Explanations are required and short** (a sentence or two), and shown after every answer,
+  right or wrong, so a lucky guess still teaches.
+- **Retries:** the one-attempt rule is dropped. A finished lesson can be retried as a new
+  attempt. Option ids don't change, so shuffling doesn't affect grading.
+- **Shuffling respects order where it matters.** Teach cards stay in place and questions are
+  shuffled only between them, so a card still comes before the questions that use it. A
+  lesson whose questions build on each other is marked to keep its order. A multiple-choice
+  question whose options depend on position ("All of the above") is marked to keep its
+  option order.
+- **Every attempt counts as evidence,** so improvement shows. Attempts are numbered per lesson,
+  so first attempts can be told from retries, which test recall of answers already shown. How
+  much each counts towards mastery is decided in step 5.
+- **Schema:** the `quizzes` table becomes `lessons`, stored bodies hold `items` rather than
+  `questions`, and attempts are numbered per lesson. Attempts are still written once, when
+  submitted, so the tables stay append-only.
+- **Results aren't reported to the agent.** The `quiz_results` message and its endpoint are
+  removed. While the chat remains, the agent reads results with a tool (e.g. `recent_results`)
+  when the learner asks for the next lesson; from step 3 they go in the run's brief.
 - **Agent tool:** `create_lesson` replaces `create_quiz`, with guidance on teaching in the
-  question and using teach cards sparingly.
-- **Client:** a full-screen lesson player with a progress bar, a check button, and right/wrong
-  feedback after each answer.
+  question, using teach cards sparingly, keeping explanations short, and marking lessons and
+  questions whose order matters.
+- **Client:** a full-screen lesson player with a progress bar, a check button, and after each
+  answer whether it was right, the correct answer and the explanation; then a results screen
+  with a Retry button.
 
 ### Step 2: question types
 - Fill in the blank (typed or picked from a word bank), ordering (put steps in order) and
-  matching (pair items). Each needs a model, grading, a learner view and a player input.
+  matching (pair items). Each needs a model, grading, a learner view, a description of its
+  correct answer and a player input.
 
 ### Step 3: topic path
+- **One-off agent runs:** a brief built from the database for each job, a learner profile, and
+  a tool for the agent to write notes.
+- **The brief holds what every run needs:** the profile, notes, the current syllabus, results
+  since the last run, and a one-line summary of each recent lesson. Details needed only
+  sometimes (a past lesson's questions, older evidence) are fetched with read tools.
+- **Run logs:** `conversations` becomes `runs`, each recording its job (intake, next lesson,
+  ask), topic, start and finish times and cost; `transcript_items` stays under runs. Kept for
+  debugging bad lessons and tracking cost, never replayed to the agent.
 - **Intake:** the learner types what they want to learn; the agent replies with two or three
   setup questions to tap (goal, current level, time per day), then a placement lesson, then
   the syllabus.
 - **Path screen:** the syllabus as a path of units with the next lesson highlighted, and a list
   of topics to switch between.
-- **Background generation:** after a lesson ends, the agent prepares the next one while the
-  learner looks at their results.
-- The chat UI and its endpoints for typed messages are removed or reduced to what intake needs.
+- **Background generation:** when a topic has no unstarted lesson ready, a run prepares the
+  next one while the learner looks at their results. Its brief holds the results since the
+  last run, and the same run can revise the syllabus. The client learns when it's ready.
+  **At most one generation run per topic at a time:** a request that would start another
+  while one is going waits for it instead. One server process, so an in-memory marker per
+  topic is enough.
+- **Removed:** the chat UI, typed-message endpoints, and resuming conversations (resume tokens,
+  the session store, reopening sessions after a restart).
 
 ### Step 4: steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More
-  examples", "More real-world"), sent to the agent with the results.
+  examples", "More real-world"), saved to the learner profile and in the next brief.
 - **Syllabus proposals:** a `propose_revision` tool whose change is shown as a card ("Add a unit
   on window functions?"); accepting applies it through the existing revision checks. The
   learner can also ask for more on a unit or to skip one.
-- **"Ask about this":** a short answer card about the question or explanation on screen.
+- **"Ask about this":** a one-off run answering a question about what's on screen, shown as a
+  short answer card. No follow-up questions, as in Duolingo. If the question reveals something
+  lasting ("keeps confusing joins and unions"), the run writes a note.
 
 ### Step 5: review
-- Mastery per objective computed from evidence, shown on the path, deciding how much repeats
-  within a lesson count compared with first tries.
+- Mastery per objective computed from evidence, shown on the path, deciding how much retries
+  count compared with first attempts.
 - Review lessons that bring back weak or due objectives, scheduled by spaced repetition.
+
+## Open questions
+- **Existing data:** is anything in the local database worth migrating through the rename
+  (stored quizzes use `questions`, transcripts hold `create_quiz` calls), or can it be reset?
+- **Topics:** nothing defines a topic yet, and intake and placement happen before a syllabus
+  exists. A topic record (holding the profile answers, the syllabus once made and the next
+  lesson) is probably needed for the path screen and topic switching.
+- **Setup questions:** asking tap-to-answer questions needs a tool, e.g.
+  `ask_learner(question, options)`.
+- **Lesson purposes:** placement lessons measure rather than teach; should they have teach
+  cards or allow retries?
+- **Step 3's size:** it holds the run brief, intake, placement, the path screen, background
+  generation and removing the chat. One-off runs and background generation could be their own
+  step.
 
 ## Later, not yet scheduled
 - **LLM-graded free-text answers** with a rubric, for open-ended skills.
