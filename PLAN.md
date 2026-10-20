@@ -79,7 +79,7 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
 | 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done (not merged) |
-| 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Not started |
+| 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Done (not merged) |
 | 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Not started |
 | 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Not started |
 | 5 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 4 | Not started |
@@ -152,6 +152,24 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 - Fill in the blank (typed or picked from a word bank), ordering (put steps in order) and
   matching (pair items). Each needs a model and a response check on the server, and grading,
   a description of its correct answer and an input in the player.
+- **As built:**
+  - `FillBlank`: `text` with `___` (three or more underscores) per blank, `blanks` (each with
+    its accepted answers), an optional `word_bank` (each word used once; must hold every
+    blank's first answer) and `case_sensitive`. Answered with `BlanksResponse(values)`.
+  - `Ordering`: `sequence`, the items in the correct order. Answered with
+    `OrderResponse(item_ids)`, which must place every item once.
+  - `Matching`: `pairs` of `left` and `right`, each side unique. Answered with
+    `MatchResponse(matches)`, pair id to pair id, which must match every item once.
+  - All three are graded right or wrong as a whole; there's no partial credit.
+  - `create_lesson` now asks for a mix of types, favouring fill in the blank, text match,
+    ordering and matching over true/false and multiple choice.
+  - Ordering and matching are shuffled for display by the client (`shuffle.ts`), because an
+    ordering's stored order is its answer; an ordering never starts out solved. The server
+    still shuffles questions and multiple-choice options.
+  - Client: each question type has its own input component in `components/inputs/`, which
+    reports a whole response or none; `grading.ts` gains the new types and `responseText`.
+  - Not verified: the new inputs in a browser, and the billed live schema test (now asking
+    for every question type).
 
 ### Step 3: agent runs
 - **Topics:** a `topics` table (id, learner, the line they typed, created). Everything else
