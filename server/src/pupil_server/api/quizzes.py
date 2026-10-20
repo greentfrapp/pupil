@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from pupil_server.db import LOCAL_LEARNER, NotFound, new_id
-from pupil_server.db.learning import AttemptRepo, QuizRepo
+from pupil_server.db.learning import AlreadyAnswered, AttemptRepo, QuizRepo
 from pupil_server.learning.quiz import (
     QuestionResult,
     Quiz,
@@ -83,8 +83,8 @@ async def get_quiz(quiz_id: str, request: Request) -> QuizOut:
         raise HTTPException(404, "no such quiz") from None
     attempt = None
     if taken:
-        results = await attempts.results(LEARNER, taken[0].id)
-        attempt = _attempt_out(quiz, taken[0], results)
+        results = await attempts.results(LEARNER, taken.id)
+        attempt = _attempt_out(quiz, taken, results)
     return QuizOut(quiz=learner_view(quiz), attempt=attempt)
 
 
@@ -94,8 +94,6 @@ async def submit_answers(quiz_id: str, body: AnswersIn, request: Request) -> Att
     attempts = AttemptRepo(db)
     try:
         quiz = await QuizRepo(db).get(LEARNER, quiz_id)
-        if await attempts.for_quiz(LEARNER, quiz_id):
-            raise HTTPException(409, "this quiz has already been answered")
         attempt = QuizAttempt(
             id=new_id("att"),
             quiz_id=quiz_id,
@@ -105,6 +103,8 @@ async def submit_answers(quiz_id: str, body: AnswersIn, request: Request) -> Att
         results = await attempts.submit(LEARNER, attempt)
     except NotFound:
         raise HTTPException(404, "no such quiz") from None
+    except AlreadyAnswered:
+        raise HTTPException(409, "this quiz has already been answered") from None
     except (ValueError, TypeError) as exc:
         # Answers to questions the quiz doesn't have, or of the wrong kind.
         raise HTTPException(422, str(exc)) from None
