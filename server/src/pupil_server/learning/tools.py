@@ -226,8 +226,9 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
 
     @tool(
         "create_lesson",
-        "Create a short lesson (1 to 3 minutes) that teaches mostly by asking. The app grades it, "
-        "so every question needs an exact answer. Teach inside the questions where you can, "
+        "Create a short lesson that teaches mostly by asking: 8 to 12 questions, or 10 to 15 "
+        "from easy to hard for placement. The app grades it, so every question needs an exact "
+        "answer. Teach inside the questions where you can, "
         "e.g. 'In Python, // divides and rounds down. What is 7 // 2?'. Add a teach card only "
         "before a brand-new idea, and rarely. After each answer the learner sees whether they "
         "were right, the correct answer and the explanation, so keep explanations to a "
