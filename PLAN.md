@@ -70,16 +70,21 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 | 5 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 3 | Not started |
 
 ### Step 1: lessons
-- **Model:** a lesson is an ordered list of items, each a question (the existing union) or a
-  teach card (title, short text). Decide whether a lesson is a new type or the quiz type
-  extended with teach cards; placement and checkpoint quizzes would then be lessons without
-  cards.
+- **Model: the quiz type is extended and renamed to `Lesson`.** A lesson is an ordered list of
+  items, each a question (the existing union) or a teach card (title, short text). Placement
+  and checkpoint quizzes become lessons without teach cards, so grading, attempts, evidence and
+  the learner view carry over. The rename covers the `quizzes` table, the API and the tools.
+  Stored quizzes keep `questions` rather than `items`, so a migration rewrites them or the
+  model still accepts the old shape when loading.
 - **Per-answer checking:** the answer key can't go to the client, so the player sends each
   answer to the server and gets back right/wrong plus the explanation. The attempt is final
-  when the lesson ends; how per-answer checks and repeats map onto attempts and evidence
-  (first try only, or every try) needs deciding.
-- **Agent tool:** `create_lesson`, replacing or alongside `create_quiz`, with guidance on
-  teaching in the question and using teach cards sparingly.
+  when the lesson ends.
+- **Every try counts as evidence,** so improvement shows. Each piece of evidence records
+  whether it was the first try or a repeat within the lesson: a repeat comes just after the
+  explanation, so it shows recall more than learning. How much each kind counts towards
+  mastery is decided in step 5.
+- **Agent tool:** `create_lesson` replaces `create_quiz`, with guidance on teaching in the
+  question and using teach cards sparingly.
 - **Client:** a full-screen lesson player with a progress bar, a check button, and right/wrong
   feedback after each answer.
 
@@ -106,7 +111,8 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 - **"Ask about this":** a short answer card about the question or explanation on screen.
 
 ### Step 5: review
-- Mastery per objective computed from evidence, shown on the path.
+- Mastery per objective computed from evidence, shown on the path, deciding how much repeats
+  within a lesson count compared with first tries.
 - Review lessons that bring back weak or due objectives, scheduled by spaced repetition.
 
 ## Later, not yet scheduled
