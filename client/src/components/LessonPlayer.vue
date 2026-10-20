@@ -1,21 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
-  checkAnswer,
   getLesson,
   submitAttempt,
-  type Attempt,
+  type Answer,
   type AttemptSummary,
-  type Check,
+  type Lesson,
   type LessonResponse,
-  type LessonView,
-  type QuestionView,
+  type MultipleChoice,
+  type Question,
 } from '../api/lessons'
+import { answerText, grade } from '../grading'
 
 const props = defineProps<{ lessonId: string }>()
 const emit = defineEmits<{ close: [] }>()
 
-const lesson = ref<LessonView | null>(null)
+const lesson = ref<Lesson | null>(null)
 const attempts = ref<AttemptSummary[]>([])
 const error = ref<string | null>(null)
 const busy = ref(false)
@@ -23,9 +23,8 @@ const busy = ref(false)
 // One run through the lesson. Quitting part-way keeps nothing: the attempt is only submitted
 // at the end.
 const index = ref(0)
-const responses = ref<Record<string, LessonResponse>>({})
-const feedback = ref<Check | null>(null)
-const result = ref<Attempt | null>(null)
+const answers = ref<Record<string, Answer>>({})
+const result = ref<AttemptSummary | null>(null)
 
 // What the learner has entered for the current question, in the form each input edits.
 const picked = ref<string[]>([])
@@ -36,6 +35,13 @@ const item = computed(() => lesson.value?.items[index.value])
 const question = computed(() =>
   item.value && item.value.kind !== 'teach_card' ? item.value : null,
 )
+/** How the learner did on the current question, once they've checked their answer. */
+const feedback = computed(() => {
+  const q = question.value
+  const answer = q && answers.value[q.id]
+  if (!q || !answer) return null
+  return { correct: answer.correct, answer: answerText(q), explanation: q.explanation }
+})
 const isLast = computed(() => index.value === (lesson.value?.items.length ?? 0) - 1)
 const progress = computed(() => {
   const total = lesson.value?.items.length ?? 1
@@ -52,8 +58,7 @@ async function load() {
   lesson.value = null
   result.value = null
   index.value = 0
-  responses.value = {}
-  feedback.value = null
+  answers.value = {}
   clearInputs()
   try {
     const loaded = await getLesson(props.lessonId)
@@ -72,7 +77,7 @@ function clearInputs() {
   typed.value = ''
 }
 
-function toggle(q: QuestionView, optionId: string) {
+function toggle(q: MultipleChoice, optionId: string) {
   if (!q.multiple) picked.value = [optionId]
   else if (picked.value.includes(optionId))
     picked.value = picked.value.filter((id) => id !== optionId)
@@ -97,34 +102,24 @@ const response = computed<LessonResponse | null>(() => {
   return null
 })
 
-async function check() {
+function check() {
   const q = question.value
   const r = response.value
-  if (!q || !r || busy.value || feedback.value) return
-  busy.value = true
-  error.value = null
-  try {
-    feedback.value = await checkAnswer(props.lessonId, q.id, r)
-    responses.value[q.id] = r
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    busy.value = false
-  }
+  if (!q || !r || feedback.value) return
+  answers.value[q.id] = { response: r, correct: grade(q, r) }
 }
 
 async function next() {
   if (busy.value || result.value) return
   if (!isLast.value) {
     index.value++
-    feedback.value = null
     clearInputs()
     return
   }
   busy.value = true
   error.value = null
   try {
-    result.value = await submitAttempt(props.lessonId, responses.value)
+    result.value = await submitAttempt(props.lessonId, answers.value)
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -139,27 +134,37 @@ function onEnter() {
   else check()
 }
 
-function describe(q: QuestionView, r: LessonResponse | null): string {
+function describe(q: Question, r: LessonResponse | null): string {
   if (!r) return 'Skipped'
   switch (r.kind) {
-    case 'choice':
-      return r.option_ids.map((id) => q.options?.find((o) => o.id === id)?.text ?? id).join(', ')
+    case 'choice': {
+      const options = q.kind === 'multiple_choice' ? q.options : []
+      return r.option_ids.map((id) => options.find((o) => o.id === id)?.text ?? id).join(', ')
+    }
     case 'bool':
       return r.value ? 'True' : 'False'
     case 'number':
-      return q.unit ? `${r.value} ${q.unit}` : String(r.value)
+      return q.kind === 'numeric' && q.unit ? `${r.value} ${q.unit}` : String(r.value)
     case 'text':
       return r.text
   }
 }
 
+/** Every question, in the order taken, with how the learner did. */
 const results = computed(() => {
   if (!lesson.value || !result.value) return []
-  const byId = new Map(lesson.value.items.map((i) => [i.id, i]))
-  return result.value.results.map((r) => {
-    const q = byId.get(r.question_id) as QuestionView
-    return { ...r, prompt: q.prompt, given: describe(q, r.response) }
-  })
+  return lesson.value.items
+    .filter((i): i is Question => i.kind !== 'teach_card')
+    .map((q) => {
+      const answer = answers.value[q.id]
+      return {
+        id: q.id,
+        prompt: q.prompt,
+        correct: answer.correct,
+        given: describe(q, answer.response),
+        answer: answerText(q),
+      }
+    })
 })
 
 const inputClass =
@@ -220,7 +225,7 @@ const buttonClass =
         <ol class="flex flex-col gap-2">
           <li
             v-for="r in results"
-            :key="r.question_id"
+            :key="r.id"
             class="rounded-xl border-2 border-gray-100 px-4 py-3"
           >
             <p class="font-medium">

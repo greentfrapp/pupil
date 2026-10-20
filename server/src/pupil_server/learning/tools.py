@@ -1,8 +1,8 @@
 """Agent tools for planning and teaching: syllabi and lessons.
 
 The agent writes syllabi and lessons, but never grades or relays answers: the learner answers
-in the app's lesson player, the code grades them, and the agent reads the results when it
-needs them. Bad input comes back to the agent as an error result naming the problem, so it
+in the app's lesson player, which grades them, and the agent reads the results when it needs
+them. Bad input comes back to the agent as an error result naming the problem, so it
 can correct itself.
 """
 
@@ -226,7 +226,7 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
 
     @tool(
         "create_lesson",
-        "Create a short lesson (1 to 3 minutes) that teaches mostly by asking. Code grades it, "
+        "Create a short lesson (1 to 3 minutes) that teaches mostly by asking. The app grades it, "
         "so every question needs an exact answer. Teach inside the questions where you can, "
         "e.g. 'In Python, // divides and rounds down. What is 7 // 2?'. Add a teach card only "
         "before a brand-new idea, and rarely. After each answer the learner sees whether they "
@@ -234,7 +234,6 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
         "sentence or two. Write the whole lesson in this one call. The learner takes it in the "
         "app's lesson player, so don't repeat its questions or answers in the chat. Read how "
         "they did with recent_results.",
-        hide_input=True,  # the arguments hold the answer key
     )
     async def create_lesson(plan: LessonPlan) -> dict[str, Any]:
         lesson = Lesson(id=new_id("les"), **plan.model_dump())

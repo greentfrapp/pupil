@@ -61,96 +61,50 @@ def client(tmp_path: Path):
         yield c
 
 
-def check(client: TestClient, question_id: str, response: dict, lesson_id: str = "les_1"):
-    body = {"question_id": question_id, "response": response}
-    return client.post(f"/api/lessons/{lesson_id}/check", json=body)
+SKIPPED = {"response": None, "correct": False}
+RIGHT_Q1 = {"response": {"kind": "bool", "value": True}, "correct": True}
 
 
-def submit(client: TestClient, responses: dict, lesson_id: str = "les_1"):
-    return client.post(f"/api/lessons/{lesson_id}/attempts", json={"responses": responses})
+def submit(client: TestClient, answers: dict, lesson_id: str = "les_1"):
+    every = {"q1": SKIPPED, "q2": SKIPPED, **answers}
+    return client.post(f"/api/lessons/{lesson_id}/attempts", json={"answers": every})
 
 
 # Getting a lesson
 
 
-def test_the_lesson_is_served_without_answers(client: TestClient):
+def test_the_lesson_is_served_with_its_answers_for_the_player(client: TestClient):
     res = client.get("/api/lessons/les_1")
     assert res.status_code == 200
     body = res.json()
-    assert sorted(i["id"] for i in body["lesson"]["items"]) == ["c1", "q1", "q2"]
-    assert body["lesson"]["items"][0] == {
-        "kind": "teach_card",
-        "id": "c1",
-        "title": "Lists",
-        "text": "A list holds items.",
-    }
-    assert "answer" not in res.text
-    assert "Three letters" not in res.text
+    items = {i["id"]: i for i in body["lesson"]["items"]}
+    assert body["lesson"]["items"][0]["id"] == "c1"  # nothing moves past a teach card
+    assert items["q2"]["answer"] == 3
+    assert items["q2"]["explanation"] == "Three letters"
     assert body["attempts"] == []
 
 
 def test_the_lesson_lists_its_attempts(client: TestClient):
-    submit(client, {"q1": {"kind": "bool", "value": True}})
+    submit(client, {"q1": RIGHT_Q1})
     submit(client, {})
     attempts = client.get("/api/lessons/les_1").json()["attempts"]
     assert [(a["number"], a["correct"], a["total"]) for a in attempts] == [(1, 1, 2), (2, 0, 2)]
 
 
-# Checking each answer
-
-
-def test_an_answer_is_checked_with_the_correct_answer_and_explanation(client: TestClient):
-    wrong = check(client, "q2", {"kind": "number", "value": 4})
-    assert wrong.status_code == 200
-    assert wrong.json() == {"correct": False, "answer": "3", "explanation": "Three letters"}
-    right = check(client, "q2", {"kind": "number", "value": 3})
-    assert right.json()["correct"] is True
-
-
-def test_checking_stores_nothing(client: TestClient):
-    check(client, "q1", {"kind": "bool", "value": True})
-    assert client.get("/api/lessons/les_1").json()["attempts"] == []
-
-
-def test_checks_that_dont_fit_the_lesson_are_refused(client: TestClient):
-    wrong_kind = check(client, "q1", {"kind": "text", "text": "yes"})
-    assert wrong_kind.status_code == 422
-    assert "needs a BoolResponse" in wrong_kind.json()["detail"]
-    teach_card = check(client, "c1", {"kind": "bool", "value": True})
-    assert teach_card.status_code == 422
-    assert "no question 'c1'" in teach_card.json()["detail"]
-
-
 # Submitting an attempt
 
 
-def test_an_attempt_is_graded_with_answers_and_explanations(client: TestClient):
-    res = submit(client, {"q2": {"kind": "number", "value": 3}})
+def test_an_attempt_is_stored_as_graded_by_the_player(client: TestClient):
+    res = submit(client, {"q1": RIGHT_Q1})
     assert res.status_code == 201
-    attempt = res.json()
-    assert attempt["attempt_id"].startswith("att_")
-    assert (attempt["number"], attempt["correct"], attempt["total"]) == (1, 1, 2)
-    assert attempt["results"] == [
-        {
-            "question_id": "q1",
-            "correct": False,
-            "response": None,
-            "answer": "True",
-            "explanation": "You can change a list in place.",
-        },
-        {
-            "question_id": "q2",
-            "correct": True,
-            "response": {"kind": "number", "value": 3.0},
-            "answer": "3",
-            "explanation": "Three letters",
-        },
-    ]
+    summary = res.json()
+    assert summary["attempt_id"].startswith("att_")
+    assert (summary["number"], summary["correct"], summary["total"]) == (1, 1, 2)
 
 
 def test_a_lesson_can_be_retried(client: TestClient):
     first = submit(client, {})
-    retry = submit(client, {"q1": {"kind": "bool", "value": True}})
+    retry = submit(client, {"q1": RIGHT_Q1})
     assert (first.status_code, retry.status_code) == (201, 201)
     assert retry.json()["number"] == 2
 
@@ -163,15 +117,19 @@ def test_placement_cant_be_retried(client: TestClient):
 
 
 def test_attempts_that_dont_fit_the_lesson_are_refused(client: TestClient):
-    wrong_kind = submit(client, {"q1": {"kind": "text", "text": "yes"}})
+    wrong_kind = submit(
+        client, {"q1": {"response": {"kind": "text", "text": "yes"}, "correct": True}}
+    )
     assert wrong_kind.status_code == 422
     assert "needs a BoolResponse" in wrong_kind.json()["detail"]
-    unknown = submit(client, {"q9": {"kind": "bool", "value": True}})
+    unknown = submit(client, {"q9": SKIPPED})
     assert unknown.status_code == 422
+    missing = client.post("/api/lessons/les_1/attempts", json={"answers": {"q1": SKIPPED}})
+    assert missing.status_code == 422
+    assert "no answers to questions ['q2']" in missing.json()["detail"]
     assert client.get("/api/lessons/les_1").json()["attempts"] == []
 
 
 def test_unknown_lesson_is_404(client: TestClient):
     assert client.get("/api/lessons/nope").status_code == 404
-    assert check(client, "q1", {"kind": "bool", "value": True}, "nope").status_code == 404
     assert submit(client, {}, "nope").status_code == 404

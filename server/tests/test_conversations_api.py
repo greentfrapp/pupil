@@ -232,35 +232,3 @@ def test_tutor_tools_write_to_the_apps_database(tmp_path: Path):
 
         stored = c.portal.call(SyllabusRepo(app.state.db).list_latest, LOCAL_LEARNER)
     assert [s.topic for s in stored] == ["Python"]
-
-
-PLACEMENT = {
-    "title": "Placement",
-    "purpose": "placement",
-    "items": [
-        {
-            "kind": "true_false",
-            "id": "q1",
-            "prompt": "p",
-            "difficulty": 1,
-            "explanation": "e",
-            "answer": True,
-        }
-    ],
-}
-
-
-def test_the_lesson_answer_key_stays_out_of_the_stream_and_transcript(tmp_path: Path):
-    backend = FakeBackend([[Call("create_lesson", PLACEMENT)]])
-    app = create_app(Settings(), db_path=tmp_path / "t.db", agent_backend=backend)
-    with TestClient(app) as c:
-        conversation_id = start(c)
-        events = say(c, conversation_id, "test me")
-        items = transcript(c, conversation_id)
-
-    streamed = next(e for e in events if e["type"] == "tool_call")
-    saved = next(i for i in items if i["type"] == "tool_call")
-    assert streamed["input"] == {}
-    assert saved["input"] == {}
-    result = next(e for e in events if e["type"] == "tool_result")
-    assert result["output"]["lesson_id"].startswith("les_")  # how the client finds the lesson

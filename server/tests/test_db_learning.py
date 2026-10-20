@@ -15,6 +15,7 @@ from pupil_server.db.learning import (
     SyllabusRepo,
 )
 from pupil_server.learning.lesson import (
+    Answer,
     Attempt,
     BoolResponse,
     ChoiceResponse,
@@ -87,8 +88,21 @@ def lesson(lid: str = "les_1", syllabus_id: str | None = "syl_1", tags=("o1", "o
     )
 
 
-def attempt(aid: str = "att_1", lesson_id: str = "les_1", at: datetime = T0, **responses):
-    return Attempt(id=aid, lesson_id=lesson_id, responses=responses, submitted_at=at)
+SKIPPED = Answer(response=None, correct=False)
+
+
+def attempt(aid: str = "att_1", lesson_id: str = "les_1", at: datetime = T0, **answers: Answer):
+    """An attempt that skips any question not given an answer."""
+    every = {"q1": SKIPPED, "q2": SKIPPED, **answers}
+    return Attempt(id=aid, lesson_id=lesson_id, answers=every, submitted_at=at)
+
+
+def right(response) -> Answer:
+    return Answer(response=response, correct=True)
+
+
+def wrong(response) -> Answer:
+    return Answer(response=response, correct=False)
 
 
 # Syllabi
@@ -146,7 +160,7 @@ async def test_another_learners_records_are_not_found(db: Database):
     syllabi, lessons, attempts = SyllabusRepo(db), LessonRepo(db), AttemptRepo(db)
     await syllabi.create(ME, syllabus())
     await lessons.create(ME, lesson())
-    await attempts.submit(ME, attempt(q1=ChoiceResponse(option_ids=["a"])))
+    await attempts.submit(ME, attempt(q1=right(ChoiceResponse(option_ids=["a"]))))
     with pytest.raises(NotFound):
         await syllabi.get(OTHER, "syl_1")
     with pytest.raises(NotFound):
@@ -206,7 +220,7 @@ async def test_submit_stores_the_attempt_results_and_evidence(db: Database):
     await SyllabusRepo(db).create(ME, syllabus())
     await LessonRepo(db).create(ME, lesson())
     attempts = AttemptRepo(db)
-    sent = attempt(q1=ChoiceResponse(option_ids=["a"]), q2=BoolResponse(value=False))
+    sent = attempt(q1=right(ChoiceResponse(option_ids=["a"])), q2=wrong(BoolResponse(value=False)))
 
     graded = await attempts.submit(ME, sent)
     assert graded.attempt == sent
@@ -224,14 +238,23 @@ async def test_submit_stores_the_attempt_results_and_evidence(db: Database):
     assert all(e.at == T0 for e in evidence)
 
 
+async def test_grades_are_stored_as_sent_not_regraded(db: Database):
+    await SyllabusRepo(db).create(ME, syllabus())
+    await LessonRepo(db).create(ME, lesson())
+    # q1's answer is "a"; the player said "b" was right, and that is what's kept.
+    sent = attempt(q1=right(ChoiceResponse(option_ids=["b"])))
+    graded = await AttemptRepo(db).submit(ME, sent)
+    assert graded.results[0].correct
+
+
 async def test_retries_are_numbered_and_each_gives_evidence(db: Database):
     await SyllabusRepo(db).create(ME, syllabus())
     await LessonRepo(db).create(ME, lesson())
     attempts = AttemptRepo(db)
     later = T0 + timedelta(minutes=3)
-    first = await attempts.submit(ME, attempt("att_1", q1=ChoiceResponse(option_ids=["b"])))
+    first = await attempts.submit(ME, attempt("att_1", q1=wrong(ChoiceResponse(option_ids=["b"]))))
     retry = await attempts.submit(
-        ME, attempt("att_2", at=later, q1=ChoiceResponse(option_ids=["a"]))
+        ME, attempt("att_2", at=later, q1=right(ChoiceResponse(option_ids=["a"])))
     )
     assert (first.number, retry.number) == (1, 2)
 
@@ -267,9 +290,13 @@ async def test_evidence_is_oldest_first_and_per_syllabus(db: Database):
     await lessons.create(ME, lesson("les_1b"))
     await lessons.create(ME, lesson("les_2", syllabus_id="syl_2"))
     later = T0 + timedelta(days=1)
-    await attempts.submit(ME, attempt("att_late", at=later, q1=ChoiceResponse(option_ids=["b"])))
-    await attempts.submit(ME, attempt("att_early", "les_1b", q1=ChoiceResponse(option_ids=["a"])))
-    await attempts.submit(ME, attempt("att_other", "les_2", q2=BoolResponse(value=True)))
+    await attempts.submit(
+        ME, attempt("att_late", at=later, q1=wrong(ChoiceResponse(option_ids=["b"])))
+    )
+    await attempts.submit(
+        ME, attempt("att_early", "les_1b", q1=right(ChoiceResponse(option_ids=["a"])))
+    )
+    await attempts.submit(ME, attempt("att_other", "les_2", q2=right(BoolResponse(value=True))))
 
     evidence = await EvidenceRepo(db).for_syllabus(ME, "syl_1")
     assert [e.attempt_id for e in evidence if e.question_id == "q1"] == ["att_early", "att_late"]
@@ -279,7 +306,9 @@ async def test_evidence_is_oldest_first_and_per_syllabus(db: Database):
 async def test_placement_results_give_no_evidence(db: Database):
     await LessonRepo(db).create(ME, lesson("les_p", syllabus_id=None))
     attempts = AttemptRepo(db)
-    graded = await attempts.submit(ME, attempt(lesson_id="les_p", q2=BoolResponse(value=True)))
+    graded = await attempts.submit(
+        ME, attempt(lesson_id="les_p", q2=right(BoolResponse(value=True)))
+    )
     assert await attempts.get(ME, "att_1") == graded
     rows = await db.run(lambda c: c.execute("SELECT count(*) FROM evidence").fetchone()[0])
     assert rows == 0
@@ -289,7 +318,7 @@ async def test_attempt_with_unknown_questions_is_refused(db: Database):
     await LessonRepo(db).create(ME, lesson("les_p", syllabus_id=None))
     attempts = AttemptRepo(db)
     with pytest.raises(ValueError, match="not in lesson"):
-        await attempts.submit(ME, attempt(lesson_id="les_p", q9=BoolResponse(value=True)))
+        await attempts.submit(ME, attempt(lesson_id="les_p", q9=right(BoolResponse(value=True))))
     with pytest.raises(NotFound):
         await attempts.get(ME, "att_1")
 

@@ -7,7 +7,7 @@ import pytest
 from pupil_server.agents import ToolResult
 from pupil_server.db import LOCAL_LEARNER, Database
 from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
-from pupil_server.learning.lesson import Attempt, NumberResponse, TeachCard
+from pupil_server.learning.lesson import Answer, Attempt, NumberResponse, TeachCard
 from pupil_server.learning.tools import learning_tools
 
 
@@ -86,9 +86,14 @@ async def create_lesson(call, syllabus: dict, unit_id: str) -> str:
     return created.output["lesson_id"]
 
 
-async def take(db: Database, lesson_id: str, attempt_id: str = "att_1", **responses) -> None:
+async def take(db: Database, lesson_id: str, attempt_id: str = "att_1", **answers) -> None:
+    """Submit an attempt at the lesson, skipping any question not given an answer."""
+    skipped = Answer(response=None, correct=False)
     attempt = Attempt(
-        id=attempt_id, lesson_id=lesson_id, responses=responses, submitted_at=datetime.now(UTC)
+        id=attempt_id,
+        lesson_id=lesson_id,
+        answers={"q1": skipped, "q2": skipped, **answers},
+        submitted_at=datetime.now(UTC),
     )
     await AttemptRepo(db).submit(LOCAL_LEARNER, attempt)
 
@@ -287,8 +292,8 @@ async def test_an_invalid_lesson_comes_back_as_an_error(call):
 async def test_recent_results_describe_the_latest_attempts(call, db: Database):
     syllabus = await create(call)
     lesson_id = await create_lesson(call, syllabus, "basics")
-    await take(db, lesson_id, "att_1", q2=NumberResponse(value=4))
-    await take(db, lesson_id, "att_2", q2=NumberResponse(value=3))
+    await take(db, lesson_id, "att_1", q2=Answer(response=NumberResponse(value=4), correct=False))
+    await take(db, lesson_id, "att_2", q2=Answer(response=NumberResponse(value=3), correct=True))
 
     result = await call("recent_results", limit=1)
     [latest] = result.output["attempts"]

@@ -28,8 +28,10 @@ proposals and short answers.
   evidence, never stored on the syllabus, so revising the plan doesn't lose what the learner
   has shown they know.
 - **Objective ids are stable:** a reworded skill keeps its id; a different skill gets a new one.
-- **Answers go from the screen to the grader, never through the agent,** and answer keys never
-  reach the client before the learner answers.
+- **Answers never go through the agent.** The lesson player grades them, by code, and the
+  server stores the results as given, without grading again. It checks that an attempt fits
+  the lesson and keeps the learner's responses, so results could be regraded if grading had a
+  bug. The answer key is sent to the client with the lesson.
 
 ### New
 - **No chat, and no long-running conversation.** Each job the agent does is a fresh, one-off
@@ -85,19 +87,18 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 
 ### Step 1: lessons
 - **Model: the quiz type is extended and renamed to `Lesson`.** A lesson is an ordered list of
-  items, each a question (the existing union) or a teach card (title, short text). Grading,
-  attempts, evidence and the learner view carry over. The rename covers the `quizzes` table,
-  the API and the tools.
+  items, each a question (the existing union) or a teach card (title, short text). Attempts
+  and evidence carry over. The rename covers the `quizzes` table, the API and the tools.
 - **Purposes are `placement` and `lesson`** (`review` comes in step 6); checkpoint quizzes are
   dropped until a "test out of this unit" is wanted. A placement lesson has no teach cards
   (checked by the model) and can't be retried; redoing placement means starting the topic
   again.
-- **Taking a lesson:** the player sends each answer to a check endpoint, which grades it
-  without storing anything and returns whether it was right, the correct answer and the
-  explanation. When the lesson ends, the player submits all the answers as one attempt, as
-  quizzes do today. A quit lesson stores nothing.
-- **Correct answers for the learner:** each question type describes its answer for display:
-  the correct option(s), the number with its unit, or the first accepted text.
+- **Taking a lesson:** the lesson comes with its answer key, and the player grades each answer
+  as it's given, showing whether it was right, the correct answer and the explanation. When
+  the lesson ends, the player submits every answer with its grade as one attempt; the server
+  checks it fits the lesson and stores it without grading again. A quit lesson stores nothing.
+- **Correct answers for the learner:** the player describes each question type's answer for
+  display: the correct option(s), the number with its unit, or the first accepted text.
 - **Explanations are required and short** (a sentence or two), and shown after every answer,
   right or wrong, so a lucky guess still teaches.
 - **Retries:** the one-attempt rule is dropped. A finished lesson can be retried as a new
@@ -126,28 +127,31 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   with a Retry button.
 - **As built:**
   - `learning/lesson.py` replaces `quiz.py`: `Lesson` (`items`, `keep_order`), `TeachCard`,
-    `MultipleChoice.keep_option_order`, a required `explanation`, `answer_text()` per question
-    type, `Attempt` and `GradedAttempt` (attempt, number, results).
-  - `learner_view(lesson, rng)` shuffles questions between teach cards, and options unless
-    kept in order.
+    `MultipleChoice.keep_option_order`, a required `explanation`, `Attempt` (an `Answer` of
+    response and grade per question) and `GradedAttempt` (attempt, number, results). The
+    server no longer grades: `check_attempt` makes sure an attempt answers every question
+    with the right kind of response, and takes objective ids from the lesson.
+  - `shuffled(lesson, rng)` shuffles questions between teach cards, and options unless kept in
+    order.
   - `LessonRepo`; `AttemptRepo.submit` numbers attempts in the same transaction as the insert
     and raises `PlacementTaken` for a second placement attempt; `get`, `for_lesson` and
     `recent` return graded attempts. Evidence has `attempt_number`.
-  - API: `GET /api/lessons/{id}` (shuffled view and attempt summaries),
-    `POST /api/lessons/{id}/check` (stores nothing) and `POST /api/lessons/{id}/attempts`
-    (201; 409 for a retaken placement; 422 for answers that don't fit).
-  - Tools: `create_lesson` (answer key hidden) and `recent_results` (newest first, each
-    described with its attempt number). The conversation `quiz-results` endpoint and
-    `quiz_results` transcript item are gone.
-  - Client: `LessonPlayer.vue` replaces `QuizRunner.vue`; the chat shows a Start the lesson
-    button under `create_lesson`.
+  - API: `GET /api/lessons/{id}` (the shuffled lesson with its answers, and attempt summaries)
+    and `POST /api/lessons/{id}/attempts` (201; 409 for a retaken placement; 422 for an
+    attempt that doesn't fit).
+  - Tools: `create_lesson` and `recent_results` (newest first, each described with its
+    attempt number). The conversation `quiz-results` endpoint, the `quiz_results` transcript
+    item and `hide_input` are gone.
+  - Client: `grading.ts` (`grade`, `answerText`) with Vitest tests (`pnpm test`);
+    `LessonPlayer.vue` replaces `QuizRunner.vue`; the chat shows a Start the lesson button
+    under `create_lesson`.
   - The billed live test passes: Claude fills in `create_lesson`'s schema, teach card
     included. Not verified: the player in a browser.
 
 ### Step 2: question types
 - Fill in the blank (typed or picked from a word bank), ordering (put steps in order) and
-  matching (pair items). Each needs a model, grading, a learner view, a description of its
-  correct answer and a player input.
+  matching (pair items). Each needs a model and a response check on the server, and grading,
+  a description of its correct answer and an input in the player.
 
 ### Step 3: agent runs
 - **Topics:** a `topics` table (id, learner, the line they typed, created). Everything else
@@ -220,7 +224,8 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 - Review lessons that bring back weak or due objectives, scheduled by spaced repetition.
 
 ## Later, not yet scheduled
-- **LLM-graded free-text answers** with a rubric, for open-ended skills.
+- **LLM-graded free-text answers** with a rubric, for open-ended skills. These are graded on
+  the server, unlike the other question types.
 - **Wrong answer keys:** "Report a problem", correcting a key after an attempt, and replacing a
   lesson; maybe a second model check when a lesson is created.
 - **Engagement:** streaks, daily goals, XP.

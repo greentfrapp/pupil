@@ -15,7 +15,7 @@ from pupil_server.learning.lesson import (
     GradedAttempt,
     Lesson,
     QuestionResult,
-    grade_attempt,
+    check_attempt,
 )
 from pupil_server.learning.progress import Evidence
 from pupil_server.learning.syllabus import Syllabus
@@ -131,9 +131,10 @@ class AttemptRepo:
         self._db = db
 
     async def submit(self, learner_id: str, attempt: Attempt) -> GradedAttempt:
-        """Grade an attempt and store it with its results, all or nothing.
+        """Store an attempt graded by the lesson player, with its results, all or nothing.
 
-        Attempts at a lesson are numbered from 1; a placement lesson can't be retried. For a
+        The attempt must fit the lesson; its grades are taken as given. Attempts at a lesson
+        are numbered from 1; a placement lesson can't be retried. For a
         lesson tied to a syllabus, each result also becomes evidence for every objective its
         question tests.
         """
@@ -142,7 +143,7 @@ class AttemptRepo:
             lesson = _lesson(conn, learner_id, attempt.lesson_id)
             if conn.execute("SELECT 1 FROM attempts WHERE id = ?", (attempt.id,)).fetchone():
                 raise AlreadyExists(f"attempt {attempt.id!r} already exists")
-            results = grade_attempt(lesson, attempt)
+            results = check_attempt(lesson, attempt)
             # Counted in the same transaction as the insert, so two submissions can't share
             # a number.
             earlier = conn.execute(
