@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { MultipleChoice, Numeric, TextMatch, TrueFalse } from './api/lessons'
-import { answerText, grade } from './grading'
+import type {
+  FillBlank,
+  Matching,
+  MultipleChoice,
+  Numeric,
+  Ordering,
+  TextMatch,
+  TrueFalse,
+} from './api/lessons'
+import { answerText, grade, responseText } from './grading'
 
 const basics = { prompt: 'p', objective_ids: [], difficulty: 1, explanation: 'Because.' }
 
@@ -28,9 +36,42 @@ function textMatch(accepted: string[], caseSensitive = false): TextMatch {
   return { ...basics, kind: 'text_match', id: 'q', accepted, case_sensitive: caseSensitive }
 }
 
+function fillBlank(text: string, answers: string[][], caseSensitive = false): FillBlank {
+  return {
+    ...basics,
+    kind: 'fill_blank',
+    id: 'q',
+    text,
+    blanks: answers.map((accepted) => ({ accepted })),
+    word_bank: null,
+    case_sensitive: caseSensitive,
+  }
+}
+
+function ordering(...texts: string[]): Ordering {
+  return {
+    ...basics,
+    kind: 'ordering',
+    id: 'q',
+    sequence: texts.map((t, i) => ({ id: String(i), text: t })),
+  }
+}
+
+function matching(...pairs: [string, string][]): Matching {
+  return {
+    ...basics,
+    kind: 'matching',
+    id: 'q',
+    pairs: pairs.map(([left, right], i) => ({ id: String(i), left, right })),
+  }
+}
+
 const picks = (...ids: string[]) => ({ kind: 'choice' as const, option_ids: ids })
 const number = (value: number) => ({ kind: 'number' as const, value })
 const text = (value: string) => ({ kind: 'text' as const, text: value })
+const blanks = (...values: string[]) => ({ kind: 'blanks' as const, values })
+const order = (...ids: string[]) => ({ kind: 'order' as const, item_ids: ids })
+const matched = (matches: Record<string, string>) => ({ kind: 'matches' as const, matches })
 
 describe('grade', () => {
   it('needs exactly the right option for a single-answer question', () => {
@@ -75,6 +116,48 @@ describe('grade', () => {
   it('refuses a response of the wrong kind', () => {
     expect(() => grade(trueFalse(true), text('yes'))).toThrow('needs a bool response')
   })
+
+  it('needs every blank filled with one of its accepted answers', () => {
+    const q = fillBlank('___ = ___ + 1', [['x'], ['y', 'Y1']])
+    expect(grade(q, blanks(' X ', 'y1'))).toBe(true) // spacing and case don't matter
+    expect(grade(q, blanks('x', 'z'))).toBe(false)
+    expect(grade(q, blanks('y', 'x'))).toBe(false) // each blank has its own answers
+    expect(grade(q, blanks('x'))).toBe(false)
+  })
+
+  it('keeps case in blanks when the question is case sensitive', () => {
+    const q = fillBlank('print(___)', [['None']], true)
+    expect(grade(q, blanks('None'))).toBe(true)
+    expect(grade(q, blanks('none'))).toBe(false)
+  })
+
+  it('needs the items in exactly the right order', () => {
+    const q = ordering('boil', 'steep', 'pour')
+    expect(grade(q, order('0', '1', '2'))).toBe(true)
+    expect(grade(q, order('1', '0', '2'))).toBe(false)
+    expect(grade(q, order('0', '1'))).toBe(false)
+  })
+
+  it('needs every pair matched correctly', () => {
+    const q = matching(['cat', 'chat'], ['dog', 'chien'])
+    expect(grade(q, matched({ 0: '0', 1: '1' }))).toBe(true)
+    expect(grade(q, matched({ 0: '1', 1: '0' }))).toBe(false)
+    expect(grade(q, matched({ 0: '0' }))).toBe(false)
+  })
+})
+
+describe('responseText', () => {
+  it('names what was picked, not its ids', () => {
+    expect(responseText(choice(['a']), picks('c', 'a'))).toBe('C, A')
+    expect(responseText(ordering('boil', 'pour'), order('1', '0'))).toBe('pour → boil')
+    expect(responseText(matching(['cat', 'chat'], ['dog', 'chien']), matched({ 0: '1', 1: '0' })))
+      .toBe('cat → chien; dog → chat')
+  })
+
+  it('gives typed answers as typed', () => {
+    expect(responseText(numeric(3, 0, 'cm'), number(4))).toBe('4 cm')
+    expect(responseText(fillBlank('___ ___', [['a'], ['b']]), blanks('x', 'y'))).toBe('x, y')
+  })
 })
 
 describe('answerText', () => {
@@ -93,5 +176,15 @@ describe('answerText', () => {
 
   it('gives the first accepted text', () => {
     expect(answerText(textMatch(['def', 'DEF']))).toBe('def')
+  })
+
+  it('fills each blank with its first accepted answer', () => {
+    const q = fillBlank('for ___ in ______(3):', [['i', 'x'], ['range']])
+    expect(answerText(q)).toBe('for i in range(3):')
+  })
+
+  it('lists items in order, and pairs', () => {
+    expect(answerText(ordering('boil', 'pour'))).toBe('boil → pour')
+    expect(answerText(matching(['cat', 'chat'], ['dog', 'chien']))).toBe('cat → chat; dog → chien')
   })
 })

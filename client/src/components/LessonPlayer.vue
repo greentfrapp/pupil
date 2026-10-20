@@ -8,10 +8,15 @@ import {
   type AttemptSummary,
   type Lesson,
   type LessonResponse,
-  type MultipleChoice,
   type Question,
 } from '../api/lessons'
-import { answerText, grade } from '../grading'
+import { answerText, grade, responseText } from '../grading'
+import ChoiceInput from './inputs/ChoiceInput.vue'
+import FillBlankInput from './inputs/FillBlankInput.vue'
+import MatchingInput from './inputs/MatchingInput.vue'
+import OrderingInput from './inputs/OrderingInput.vue'
+import TrueFalseInput from './inputs/TrueFalseInput.vue'
+import TypedInput from './inputs/TypedInput.vue'
 
 const props = defineProps<{ lessonId: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -32,10 +37,10 @@ const finished = ref(false)
 const saved = ref<AttemptSummary | null>(null)
 const saveProblem = ref<{ message: string; canRetry: boolean } | null>(null)
 
-// What the learner has entered for the current question, in the form each input edits.
-const picked = ref<string[]>([])
-const bool = ref<boolean | null>(null)
-const typed = ref('')
+/** The learner's answer to the current question, or null until they've given a whole one. */
+const response = ref<LessonResponse | null>(null)
+/** Counts runs through the lesson, so a retry starts every input afresh. */
+const run = ref(0)
 
 const item = computed(() => lesson.value?.items[index.value])
 const question = computed(() =>
@@ -67,7 +72,8 @@ async function load() {
   saveProblem.value = null
   index.value = 0
   answers.value = {}
-  clearInputs()
+  response.value = null
+  run.value++
   try {
     const loaded = await getLesson(props.lessonId)
     lesson.value = loaded.lesson
@@ -78,37 +84,6 @@ async function load() {
 }
 
 onMounted(load)
-
-function clearInputs() {
-  picked.value = []
-  bool.value = null
-  typed.value = ''
-}
-
-function toggle(q: MultipleChoice, optionId: string) {
-  if (!q.multiple) picked.value = [optionId]
-  else if (picked.value.includes(optionId))
-    picked.value = picked.value.filter((id) => id !== optionId)
-  else picked.value = [...picked.value, optionId]
-}
-
-/** The learner's answer to the current question, or null until they've given one. */
-const response = computed<LessonResponse | null>(() => {
-  const q = question.value
-  if (!q) return null
-  const raw = typed.value.trim()
-  switch (q.kind) {
-    case 'multiple_choice':
-      return picked.value.length ? { kind: 'choice', option_ids: picked.value } : null
-    case 'true_false':
-      return bool.value === null ? null : { kind: 'bool', value: bool.value }
-    case 'numeric':
-      return raw && Number.isFinite(Number(raw)) ? { kind: 'number', value: Number(raw) } : null
-    case 'text_match':
-      return raw ? { kind: 'text', text: raw } : null
-  }
-  return null
-})
 
 function check() {
   const q = question.value
@@ -125,7 +100,7 @@ function next() {
     return
   }
   index.value++
-  clearInputs()
+  response.value = null
 }
 
 async function save() {
@@ -161,22 +136,6 @@ function onEnter() {
   else check()
 }
 
-function describe(q: Question, r: LessonResponse | null): string {
-  if (!r) return 'Skipped'
-  switch (r.kind) {
-    case 'choice': {
-      const options = q.kind === 'multiple_choice' ? q.options : []
-      return r.option_ids.map((id) => options.find((o) => o.id === id)?.text ?? id).join(', ')
-    }
-    case 'bool':
-      return r.value ? 'True' : 'False'
-    case 'number':
-      return q.kind === 'numeric' && q.unit ? `${r.value} ${q.unit}` : String(r.value)
-    case 'text':
-      return r.text
-  }
-}
-
 /** Every question, in the order taken, with how the learner did. */
 const results = computed(() => {
   if (!lesson.value || !finished.value) return []
@@ -188,18 +147,12 @@ const results = computed(() => {
         id: q.id,
         prompt: q.prompt,
         correct: answer.correct,
-        given: describe(q, answer.response),
+        given: answer.response ? responseText(q, answer.response) : 'Skipped',
         answer: answerText(q),
       }
     })
 })
 
-const inputClass =
-  'w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-lg focus:border-blue-500 focus:outline-none disabled:bg-gray-50'
-const choiceClass = (on: boolean) => [
-  'flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg',
-  on ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50',
-]
 const footerStyle = computed(() => {
   if (!feedback.value) return 'border-gray-100'
   return feedback.value.correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
@@ -279,43 +232,48 @@ const buttonClass =
       <template v-else-if="question">
         <p class="text-xl whitespace-pre-wrap">{{ question.prompt }}</p>
 
-        <div v-if="question.kind === 'multiple_choice'" class="flex flex-col gap-2">
-          <p v-if="question.multiple" class="text-sm text-gray-500">Pick every correct answer.</p>
-          <button
-            v-for="o in question.options ?? []"
-            :key="o.id"
-            :disabled="!!feedback"
-            :class="choiceClass(picked.includes(o.id))"
-            @click="toggle(question, o.id)"
-          >
-            {{ o.text }}
-          </button>
-        </div>
-
-        <div v-else-if="question.kind === 'true_false'" class="flex gap-2">
-          <button
-            v-for="value in [true, false]"
-            :key="String(value)"
-            :disabled="!!feedback"
-            :class="[choiceClass(bool === value), 'justify-center']"
-            @click="bool = value"
-          >
-            {{ value ? 'True' : 'False' }}
-          </button>
-        </div>
-
-        <div v-else-if="question.kind === 'numeric'" class="flex items-center gap-2">
-          <input
-            v-model="typed"
-            inputmode="decimal"
-            :disabled="!!feedback"
-            :class="inputClass"
-            autofocus
-          />
-          <span v-if="question.unit" class="text-lg text-gray-600">{{ question.unit }}</span>
-        </div>
-
-        <input v-else v-model="typed" :disabled="!!feedback" :class="inputClass" autofocus />
+        <!-- Keyed by run and question, so each starts empty, and is shuffled afresh -->
+        <ChoiceInput
+          v-if="question.kind === 'multiple_choice'"
+          :key="`${run}-${question.id}`"
+          v-model="response"
+          :question="question"
+          :disabled="!!feedback"
+        />
+        <TrueFalseInput
+          v-else-if="question.kind === 'true_false'"
+          :key="`${run}-${question.id}`"
+          v-model="response"
+          :disabled="!!feedback"
+        />
+        <FillBlankInput
+          v-else-if="question.kind === 'fill_blank'"
+          :key="`${run}-${question.id}`"
+          v-model="response"
+          :question="question"
+          :disabled="!!feedback"
+        />
+        <OrderingInput
+          v-else-if="question.kind === 'ordering'"
+          :key="`${run}-${question.id}`"
+          v-model="response"
+          :question="question"
+          :disabled="!!feedback"
+        />
+        <MatchingInput
+          v-else-if="question.kind === 'matching'"
+          :key="`${run}-${question.id}`"
+          v-model="response"
+          :question="question"
+          :disabled="!!feedback"
+        />
+        <TypedInput
+          v-else
+          :key="`${run}-${question.id}`"
+          v-model="response"
+          :question="question"
+          :disabled="!!feedback"
+        />
       </template>
     </main>
 

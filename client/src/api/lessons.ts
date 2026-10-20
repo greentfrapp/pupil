@@ -41,7 +41,39 @@ export interface TextMatch extends QuestionBase {
   case_sensitive: boolean
 }
 
-export type Question = MultipleChoice | TrueFalse | Numeric | TextMatch
+export interface FillBlank extends QuestionBase {
+  kind: 'fill_blank'
+  /** The text to complete, with ___ (three or more underscores) where each blank goes. */
+  text: string
+  blanks: { accepted: string[] }[]
+  /** Words to pick from instead of typing, each used at most once. */
+  word_bank: string[] | null
+  case_sensitive: boolean
+}
+
+export interface Ordering extends QuestionBase {
+  kind: 'ordering'
+  /** The items in the correct order; the player shuffles them. */
+  sequence: Option[]
+}
+
+export interface Matching extends QuestionBase {
+  kind: 'matching'
+  /** The correct pairs; the player shuffles each side separately. */
+  pairs: { id: string; left: string; right: string }[]
+}
+
+export type Question =
+  | MultipleChoice
+  | TrueFalse
+  | Numeric
+  | TextMatch
+  | FillBlank
+  | Ordering
+  | Matching
+
+/** Where a blank goes in a fill_blank question's text. */
+export const BLANK = /_{3,}/
 
 export interface TeachCard {
   kind: 'teach_card'
@@ -66,6 +98,10 @@ export type LessonResponse =
   | { kind: 'bool'; value: boolean }
   | { kind: 'number'; value: number }
   | { kind: 'text'; text: string }
+  | { kind: 'blanks'; values: string[] }
+  | { kind: 'order'; item_ids: string[] }
+  /** Each pair's id, to the id of the pair whose right-hand side was matched with its left. */
+  | { kind: 'matches'; matches: Record<string, string> }
 
 /** The learner's answer to one question, as the player graded it. */
 export interface Answer {
