@@ -76,7 +76,7 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
-| 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Not started |
+| 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done (not merged) |
 | 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Not started |
 | 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Not started |
 | 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Not started |
@@ -124,6 +124,25 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 - **Client:** a full-screen lesson player with a progress bar, a check button, and after each
   answer whether it was right, the correct answer and the explanation; then a results screen
   with a Retry button.
+- **As built:**
+  - `learning/lesson.py` replaces `quiz.py`: `Lesson` (`items`, `keep_order`), `TeachCard`,
+    `MultipleChoice.keep_option_order`, a required `explanation`, `answer_text()` per question
+    type, `Attempt` and `GradedAttempt` (attempt, number, results).
+  - `learner_view(lesson, rng)` shuffles questions between teach cards, and options unless
+    kept in order.
+  - `LessonRepo`; `AttemptRepo.submit` numbers attempts in the same transaction as the insert
+    and raises `PlacementTaken` for a second placement attempt; `get`, `for_lesson` and
+    `recent` return graded attempts. Evidence has `attempt_number`.
+  - API: `GET /api/lessons/{id}` (shuffled view and attempt summaries),
+    `POST /api/lessons/{id}/check` (stores nothing) and `POST /api/lessons/{id}/attempts`
+    (201; 409 for a retaken placement; 422 for answers that don't fit).
+  - Tools: `create_lesson` (answer key hidden) and `recent_results` (newest first, each
+    described with its attempt number). The conversation `quiz-results` endpoint and
+    `quiz_results` transcript item are gone.
+  - Client: `LessonPlayer.vue` replaces `QuizRunner.vue`; the chat shows a Start the lesson
+    button under `create_lesson`.
+  - Not verified: the player in a browser, and the updated billed live schema test (now
+    `create_lesson` with a teach card).
 
 ### Step 2: question types
 - Fill in the blank (typed or picked from a word bank), ordering (put steps in order) and
