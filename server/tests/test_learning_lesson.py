@@ -8,13 +8,19 @@ from pydantic import TypeAdapter, ValidationError
 from pupil_server.learning.lesson import (
     Answer,
     Attempt,
+    BlanksResponse,
     BoolResponse,
     ChoiceResponse,
+    FillBlank,
     GradedAttempt,
     Lesson,
+    Matching,
+    MatchResponse,
     MultipleChoice,
     NumberResponse,
     Numeric,
+    Ordering,
+    OrderResponse,
     Response,
     TeachCard,
     TextMatch,
@@ -92,6 +98,86 @@ def test_a_choice_of_unknown_options_is_refused():
         choice().check_response(ChoiceResponse(option_ids=["a", "z"]))
 
 
+def fill_blank(text="x = ___ + ___", answers=("1", "2"), word_bank=None) -> FillBlank:
+    return FillBlank(
+        id="q",
+        **BASICS,
+        text=text,
+        blanks=[{"accepted": [a]} for a in answers],
+        word_bank=word_bank,
+    )
+
+
+def test_fill_blank_needs_a_blank_for_each_marker():
+    with pytest.raises(ValidationError, match="has 2 ___ in its text but 1 blanks"):
+        fill_blank(answers=("1",))
+
+
+def test_a_long_run_of_underscores_is_one_blank():
+    assert len(fill_blank("x = ______", answers=("1",)).blanks) == 1
+
+
+def test_a_word_bank_must_hold_every_answer():
+    fill_blank(word_bank=["1", "2", "3"])
+    with pytest.raises(ValidationError, match=re.escape("word bank is missing answers: ['2']")):
+        fill_blank(word_bank=["1", "3"])
+    with pytest.raises(ValidationError, match=re.escape("word bank is missing answers: ['1']")):
+        fill_blank(answers=("1", "1"), word_bank=["1", "2"])  # each word fills one blank
+
+
+def test_fill_blank_responses_must_fit_the_blanks():
+    with pytest.raises(ValueError, match="has 2 blanks, got 1 answers"):
+        fill_blank().check_response(BlanksResponse(values=["1"]))
+    banked = fill_blank(word_bank=["1", "2", "3"])
+    banked.check_response(BlanksResponse(values=["3", "2"]))
+    with pytest.raises(ValueError, match=re.escape("word bank has no ['9']")):
+        banked.check_response(BlanksResponse(values=["1", "9"]))
+    with pytest.raises(ValueError, match=re.escape("word bank has no ['1']")):
+        banked.check_response(BlanksResponse(values=["1", "1"]))
+
+
+def ordering(*texts: str) -> Ordering:
+    return Ordering(
+        id="q", **BASICS, sequence=[{"id": str(i), "text": t} for i, t in enumerate(texts)]
+    )
+
+
+def test_ordering_items_must_differ():
+    with pytest.raises(ValidationError, match=re.escape("duplicate item texts: ['b']")):
+        ordering("a", "b", "b")
+
+
+def test_an_ordering_response_must_place_every_item_once():
+    q = ordering("a", "b", "c")
+    q.check_response(OrderResponse(item_ids=["2", "0", "1"]))
+    for ids in (["0", "1"], ["0", "1", "1"], ["0", "1", "9"]):
+        with pytest.raises(ValueError, match="needs every item placed exactly once"):
+            q.check_response(OrderResponse(item_ids=ids))
+
+
+def matching(*pairs: tuple[str, str]) -> Matching:
+    return Matching(
+        id="q",
+        **BASICS,
+        pairs=[
+            {"id": str(i), "left": left, "right": right} for i, (left, right) in enumerate(pairs)
+        ],
+    )
+
+
+def test_matching_sides_must_differ():
+    with pytest.raises(ValidationError, match=re.escape("duplicate right sides: ['x']")):
+        matching(("a", "x"), ("b", "x"))
+
+
+def test_a_matching_response_must_match_every_item_once():
+    q = matching(("a", "x"), ("b", "y"))
+    q.check_response(MatchResponse(matches={"0": "1", "1": "0"}))
+    for matches in ({"0": "0"}, {"0": "1", "1": "1"}, {"0": "0", "1": "9"}):
+        with pytest.raises(ValueError, match="needs every item matched exactly once"):
+            q.check_response(MatchResponse(matches=matches))
+
+
 # Lessons
 
 
@@ -165,6 +251,9 @@ def test_check_tags():
         BoolResponse(value=False),
         NumberResponse(value=1.5),
         TextResponse(text="x"),
+        BlanksResponse(values=["x", "y"]),
+        OrderResponse(item_ids=["b", "a"]),
+        MatchResponse(matches={"a": "b", "b": "a"}),
     ],
     ids=lambda r: r.kind,
 )
@@ -289,4 +378,29 @@ def test_describe_attempt_says_what_the_learner_answered():
         "- q3: wrong, answered 5 cm",
         "- q4: wrong, skipped",
         "- q5: right",
+    ]
+
+
+def test_describe_attempt_shows_the_newer_question_types_in_words():
+    lesson = Lesson(
+        id="les_1",
+        title="Mixed",
+        purpose="lesson",
+        syllabus_id="syl_1",
+        items=[
+            fill_blank().model_copy(update={"id": "q1"}),
+            ordering("boil", "pour").model_copy(update={"id": "q2"}),
+            matching(("cat", "chat"), ("dog", "chien")).model_copy(update={"id": "q3"}),
+        ],
+    )
+    sent = attempt(
+        q1=wrong(BlanksResponse(values=["1", "3"])),
+        q2=wrong(OrderResponse(item_ids=["1", "0"])),
+        q3=wrong(MatchResponse(matches={"0": "1", "1": "0"})),
+    )
+    graded = GradedAttempt(attempt=sent, number=1, results=check_attempt(lesson, sent))
+    assert describe_attempt(lesson, graded).splitlines()[1:] == [
+        "- q1: wrong, answered '1', '3'",
+        "- q2: wrong, answered 'pour' → 'boil'",
+        "- q3: wrong, answered 'cat' → 'chien'; 'dog' → 'chat'",
     ]

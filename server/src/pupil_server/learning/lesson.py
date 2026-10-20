@@ -11,6 +11,7 @@ along with the learner's responses, so results could be regraded if grading ever
 from __future__ import annotations
 
 import random
+import re
 from collections import Counter
 from typing import Annotated, ClassVar, Literal
 
@@ -49,8 +50,37 @@ class TextResponse(BaseModel):
     text: str
 
 
+class BlanksResponse(BaseModel):
+    """An answer to a fill_blank question: what went in each blank, in order."""
+
+    kind: Literal["blanks"] = "blanks"
+    values: list[str]
+
+
+class OrderResponse(BaseModel):
+    """An answer to an ordering question: the item ids, in the order the learner put them."""
+
+    kind: Literal["order"] = "order"
+    item_ids: list[str]
+
+
+class MatchResponse(BaseModel):
+    """An answer to a matching question: each pair's id, mapped to the id of the pair whose
+    right-hand side the learner matched with its left-hand side."""
+
+    kind: Literal["matches"] = "matches"
+    matches: dict[str, str]
+
+
 Response = Annotated[
-    ChoiceResponse | BoolResponse | NumberResponse | TextResponse, Field(discriminator="kind")
+    ChoiceResponse
+    | BoolResponse
+    | NumberResponse
+    | TextResponse
+    | BlanksResponse
+    | OrderResponse
+    | MatchResponse,
+    Field(discriminator="kind"),
 ]
 
 
@@ -167,7 +197,124 @@ class TextMatch(QuestionBase):
         return self
 
 
-AnyQuestion = MultipleChoice | TrueFalse | Numeric | TextMatch
+BLANK = re.compile(r"_{3,}")
+"""Where a blank goes in a fill_blank question's text."""
+
+
+class Blank(BaseModel):
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
+    accepted: list[str] = Field(min_length=1)
+    """Every answer that counts as right for this blank, the best one first: it is the one
+    shown to the learner."""
+
+
+class FillBlank(QuestionBase):
+    """A sentence or line of code with blanks to fill in, typed or picked from a word bank."""
+
+    response_type = BlanksResponse
+
+    kind: Literal["fill_blank"] = "fill_blank"
+    text: str = Field(min_length=1)
+    """The text to complete, with ___ (three underscores) where each blank goes."""
+    blanks: list[Blank] = Field(min_length=1)
+    """One per ___ in the text, in order."""
+    word_bank: list[str] | None = None
+    """Words to pick from instead of typing: each blank's best answer plus a few wrong ones,
+    each used at most once. Leave out to have the learner type."""
+    case_sensitive: bool = False
+    """Spacing is always ignored; case is too, unless this is set."""
+
+    @model_validator(mode="after")
+    def _check_blanks(self) -> FillBlank:
+        marked = len(BLANK.findall(self.text))
+        if marked != len(self.blanks):
+            raise ValueError(
+                f"question {self.id!r} has {marked} ___ in its text but {len(self.blanks)} blanks"
+            )
+        if not all(a.strip() for b in self.blanks for a in b.accepted):
+            raise ValueError(f"question {self.id!r} accepts a blank answer")
+        if self.word_bank is not None:
+            short = Counter(b.accepted[0] for b in self.blanks) - Counter(self.word_bank)
+            if short:
+                raise ValueError(
+                    f"question {self.id!r}'s word bank is missing answers: {sorted(short)}"
+                )
+        return self
+
+    def check_response(self, response: BaseModel) -> None:
+        super().check_response(response)
+        assert isinstance(response, BlanksResponse)
+        if len(response.values) != len(self.blanks):
+            raise ValueError(
+                f"question {self.id!r} has {len(self.blanks)} blanks, "
+                f"got {len(response.values)} answers"
+            )
+        if self.word_bank is not None:
+            extra = Counter(response.values) - Counter(self.word_bank)
+            if extra:
+                raise ValueError(f"question {self.id!r}'s word bank has no {sorted(extra)}")
+
+
+def _check_unique(question_id: str, what: str, values: list[str]) -> None:
+    duplicates = sorted(v for v, n in Counter(values).items() if n > 1)
+    if duplicates:
+        raise ValueError(f"question {question_id!r} has duplicate {what}: {duplicates}")
+
+
+class Ordering(QuestionBase):
+    """Items the learner puts in order, e.g. the steps of a process or events in time."""
+
+    response_type = OrderResponse
+
+    kind: Literal["ordering"] = "ordering"
+    sequence: list[Option] = Field(min_length=2)
+    """The items, in the correct order. The player shuffles them."""
+
+    @model_validator(mode="after")
+    def _check_sequence(self) -> Ordering:
+        _check_unique(self.id, "item ids", [o.id for o in self.sequence])
+        _check_unique(self.id, "item texts", [o.text for o in self.sequence])
+        return self
+
+    def check_response(self, response: BaseModel) -> None:
+        super().check_response(response)
+        assert isinstance(response, OrderResponse)
+        if sorted(response.item_ids) != sorted(o.id for o in self.sequence):
+            raise ValueError(f"question {self.id!r} needs every item placed exactly once")
+
+
+class Pair(BaseModel):
+    id: str = Field(min_length=1)
+    left: str = Field(min_length=1)
+    right: str = Field(min_length=1)
+
+
+class Matching(QuestionBase):
+    """Pairs the learner matches up, e.g. terms and their meanings."""
+
+    response_type = MatchResponse
+
+    kind: Literal["matching"] = "matching"
+    pairs: list[Pair] = Field(min_length=2)
+    """The correct pairs. The player shuffles each side separately."""
+
+    @model_validator(mode="after")
+    def _check_pairs(self) -> Matching:
+        _check_unique(self.id, "pair ids", [p.id for p in self.pairs])
+        _check_unique(self.id, "left sides", [p.left for p in self.pairs])
+        _check_unique(self.id, "right sides", [p.right for p in self.pairs])
+        return self
+
+    def check_response(self, response: BaseModel) -> None:
+        super().check_response(response)
+        assert isinstance(response, MatchResponse)
+        ids = sorted(p.id for p in self.pairs)
+        if sorted(response.matches) != ids or sorted(response.matches.values()) != ids:
+            raise ValueError(f"question {self.id!r} needs every item matched exactly once")
+
+
+AnyQuestion = MultipleChoice | TrueFalse | Numeric | TextMatch | FillBlank | Ordering | Matching
 Question = Annotated[AnyQuestion, Field(discriminator="kind")]
 
 
@@ -354,4 +501,14 @@ def _describe_response(question: QuestionBase, response: BaseModel) -> str:
             return f"{value:g} {unit}" if unit else f"{value:g}"
         case TextResponse(text=text):
             return repr(text)
+        case BlanksResponse(values=values):
+            return ", ".join(repr(v) for v in values)
+        case OrderResponse(item_ids=ids) if isinstance(question, Ordering):
+            texts = {o.id: o.text for o in question.sequence}
+            return " → ".join(repr(texts.get(i, i)) for i in ids)
+        case MatchResponse(matches=matches) if isinstance(question, Matching):
+            pairs = {p.id: p for p in question.pairs}
+            return "; ".join(
+                f"{pairs[left].left!r} → {pairs[right].right!r}" for left, right in matches.items()
+            )
     return repr(response)

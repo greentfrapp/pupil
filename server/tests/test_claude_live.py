@@ -59,8 +59,8 @@ async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
             e
             async for e in session.send(
                 "Create a syllabus on arithmetic with one unit, then a lesson for it with a "
-                "teach card, one multiple choice question, one true/false question, one numeric "
-                "question and one text match question."
+                "teach card and one question of each type: multiple choice, true/false, numeric, "
+                "text match, fill in the blank with a word bank, ordering and matching."
             )
         ]
     finally:
