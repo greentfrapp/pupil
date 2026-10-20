@@ -94,3 +94,19 @@ def test_a_conversation_resumes_after_a_restart(tmp_path):
         reply = say(client, conversation_id, "Which word did I ask you to remember? One word.")
 
     assert "tangerine" in reply.lower()
+
+
+def test_a_new_topic_gets_a_placement_lesson_from_a_run(tmp_path):
+    backend = ClaudeBackend(workdir=tmp_path / "agent")
+    app = create_app(Settings(), db_path=tmp_path / "pupil.db", agent_backend=backend)
+    profile = {"why": "curiosity", "depth": "overview", "level": "basics"}
+    with TestClient(app) as client:
+        created = client.post("/api/topics", json={"request": "Fractions", "profile": profile})
+        topic_id = created.json()["id"]
+        client.portal.call(app.state.runs.wait, topic_id)
+        topic = client.get(f"/api/topics/{topic_id}").json()
+
+    assert topic["last_run"] == {"job": "placement", "state": "done", "error": None}
+    [placement] = topic["lessons"]
+    assert placement["purpose"] == "placement"
+    assert placement["questions"] >= 5

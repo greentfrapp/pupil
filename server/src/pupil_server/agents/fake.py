@@ -7,7 +7,7 @@ tool plumbing is exercised even though no model is involved.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -30,7 +30,8 @@ class Say:
 @dataclass(frozen=True)
 class Call:
     tool: str
-    arguments: dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] | Callable[[list[Any]], dict[str, Any]] = field(default_factory=dict)
+    """Or a function of the outputs of the turn's earlier calls, for ids the app assigned."""
 
 
 Step = Say | Call
@@ -56,18 +57,22 @@ class FakeSession:
     async def send(self, text: str) -> AsyncIterator[AgentEvent]:
         self.received.append(text)
         turn = self._script.pop(0) if self._script else _default_turn(text)
+        outputs: list[Any] = []
         for step in turn:
             if isinstance(step, Say):
                 for word in step.text.split(" "):
                     yield TextDelta(text=word + " ")
                 continue
             call_id = f"call_{uuid.uuid4().hex[:8]}"
-            yield ToolCall(id=call_id, name=step.tool, input=step.arguments)
+            arguments = step.arguments(outputs) if callable(step.arguments) else step.arguments
+            yield ToolCall(id=call_id, name=step.tool, input=arguments)
             tool = self._tools.get(step.tool)
             if tool is None:
                 yield ToolResult(id=call_id, output=f"unknown tool {step.tool!r}", is_error=True)
             else:
-                yield await tool.invoke(call_id, step.arguments)
+                result = await tool.invoke(call_id, arguments)
+                outputs.append(result.output)
+                yield result
         yield TurnComplete(cost_usd=0.0)
 
     async def interrupt(self) -> None:
