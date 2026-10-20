@@ -10,6 +10,7 @@ import sqlite3
 from datetime import UTC, datetime
 
 from pupil_server.db.database import AlreadyExists, Database, NotFound, timestamp
+from pupil_server.db.topics import topic_row
 from pupil_server.learning.lesson import (
     Attempt,
     GradedAttempt,
@@ -35,14 +36,19 @@ class SyllabusRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def create(self, learner_id: str, syllabus: Syllabus) -> Syllabus:
-        """Store a new syllabus as revision 1, whatever revision it carries."""
+    async def create(
+        self, learner_id: str, syllabus: Syllabus, topic_id: str | None = None
+    ) -> Syllabus:
+        """Store a new syllabus as revision 1, whatever revision it carries, for the topic if
+        given; its revisions stay with that topic."""
         first = syllabus.model_copy(update={"revision": 1})
 
         def work(conn: sqlite3.Connection) -> Syllabus:
             if _latest_revision(conn, syllabus.id) is not None:
                 raise AlreadyExists(f"syllabus {syllabus.id!r} already exists; revise it instead")
-            _insert_syllabus(conn, learner_id, first)
+            if topic_id is not None:
+                topic_row(conn, learner_id, topic_id)
+            _insert_syllabus(conn, learner_id, first, topic_id)
             return first
 
         return await self._db.run(work)
@@ -62,7 +68,10 @@ class SyllabusRepo:
                     f"is based on revision {syllabus.revision}"
                 )
             revised = syllabus.model_copy(update={"revision": latest.revision + 1})
-            _insert_syllabus(conn, learner_id, revised)
+            topic_id = conn.execute(
+                "SELECT topic_id FROM syllabi WHERE id = ? AND revision = 1", (syllabus.id,)
+            ).fetchone()[0]
+            _insert_syllabus(conn, learner_id, revised, topic_id)
             return revised
 
         return await self._db.run(work)
@@ -100,30 +109,80 @@ class SyllabusRepo:
 
         return await self._db.run(work)
 
+    async def for_topic(self, learner_id: str, topic_id: str) -> Syllabus | None:
+        """The topic's plan: the latest revision of its newest syllabus, if it has one."""
+
+        def work(conn: sqlite3.Connection) -> Syllabus | None:
+            topic_row(conn, learner_id, topic_id)
+            row = conn.execute(
+                "SELECT id FROM syllabi WHERE topic_id = ? AND revision = 1 "
+                "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (topic_id,),
+            ).fetchone()
+            return None if row is None else _latest_syllabus(conn, learner_id, row["id"])
+
+        return await self._db.run(work)
+
 
 class LessonRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def create(self, learner_id: str, lesson: Lesson) -> None:
-        """Store a lesson. One tied to a syllabus must tag only objectives its latest revision
-        has."""
+    async def create(self, learner_id: str, lesson: Lesson, topic_id: str | None = None) -> None:
+        """Store a lesson, for the topic if given. One tied to a syllabus must tag only
+        objectives its latest revision has."""
 
         def work(conn: sqlite3.Connection) -> None:
             if conn.execute("SELECT 1 FROM lessons WHERE id = ?", (lesson.id,)).fetchone():
                 raise AlreadyExists(f"lesson {lesson.id!r} already exists")
+            if topic_id is not None:
+                topic_row(conn, learner_id, topic_id)
             if lesson.syllabus_id is not None:
                 lesson.check_tags(_latest_syllabus(conn, learner_id, lesson.syllabus_id))
             conn.execute(
-                "INSERT INTO lessons (id, learner_id, syllabus_id, body, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (lesson.id, learner_id, lesson.syllabus_id, lesson.model_dump_json(), _now()),
+                "INSERT INTO lessons (id, learner_id, syllabus_id, topic_id, body, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    lesson.id,
+                    learner_id,
+                    lesson.syllabus_id,
+                    topic_id,
+                    lesson.model_dump_json(),
+                    _now(),
+                ),
             )
 
         await self._db.run(work)
 
     async def get(self, learner_id: str, lesson_id: str) -> Lesson:
         return await self._db.run(lambda conn: _lesson(conn, learner_id, lesson_id))
+
+    async def topic_of(self, learner_id: str, lesson_id: str) -> str | None:
+        """The topic the lesson was made for, if any."""
+
+        def work(conn: sqlite3.Connection) -> str | None:
+            row = conn.execute(
+                "SELECT topic_id FROM lessons WHERE learner_id = ? AND id = ?",
+                (learner_id, lesson_id),
+            ).fetchone()
+            if row is None:
+                raise NotFound(f"no lesson {lesson_id!r}")
+            return row["topic_id"]
+
+        return await self._db.run(work)
+
+    async def for_topic(self, learner_id: str, topic_id: str) -> list[Lesson]:
+        """The topic's lessons, oldest first."""
+
+        def work(conn: sqlite3.Connection) -> list[Lesson]:
+            topic_row(conn, learner_id, topic_id)
+            rows = conn.execute(
+                "SELECT body FROM lessons WHERE topic_id = ? ORDER BY created_at, rowid",
+                (topic_id,),
+            )
+            return [Lesson.model_validate_json(r["body"]) for r in rows]
+
+        return await self._db.run(work)
 
 
 class AttemptRepo:
@@ -209,14 +268,32 @@ class AttemptRepo:
 
         return await self._db.run(work)
 
-    async def recent(self, learner_id: str, limit: int) -> list[GradedAttempt]:
-        """The learner's latest attempts at any lesson, newest first."""
+    async def recent(
+        self, learner_id: str, limit: int, topic_id: str | None = None
+    ) -> list[GradedAttempt]:
+        """The learner's latest attempts at any lesson, or any of the topic's, newest first."""
 
         def work(conn: sqlite3.Connection) -> list[GradedAttempt]:
+            where, params = _in_topic(conn, learner_id, topic_id)
             rows = conn.execute(
-                f"{_ATTEMPTS} WHERE learner_id = ? ORDER BY submitted_at DESC, rowid DESC LIMIT ?",
-                (learner_id, limit),
+                f"{_ATTEMPTS} WHERE {where} ORDER BY submitted_at DESC, rowid DESC LIMIT ?",
+                (*params, limit),
             )
+            return [_graded(conn, learner_id, r) for r in rows.fetchall()]
+
+        return await self._db.run(work)
+
+    async def since(
+        self, learner_id: str, topic_id: str, after: datetime | None
+    ) -> list[GradedAttempt]:
+        """Attempts at the topic's lessons submitted after `after` (or ever), oldest first."""
+
+        def work(conn: sqlite3.Connection) -> list[GradedAttempt]:
+            where, params = _in_topic(conn, learner_id, topic_id)
+            if after is not None:
+                where += " AND submitted_at > ?"
+                params = (*params, timestamp(after))
+            rows = conn.execute(f"{_ATTEMPTS} WHERE {where} ORDER BY submitted_at, rowid", params)
             return [_graded(conn, learner_id, r) for r in rows.fetchall()]
 
         return await self._db.run(work)
@@ -260,10 +337,13 @@ def _latest_syllabus(conn: sqlite3.Connection, learner_id: str, syllabus_id: str
     return Syllabus.model_validate_json(row["body"])
 
 
-def _insert_syllabus(conn: sqlite3.Connection, learner_id: str, syllabus: Syllabus) -> None:
+def _insert_syllabus(
+    conn: sqlite3.Connection, learner_id: str, syllabus: Syllabus, topic_id: str | None
+) -> None:
     conn.execute(
-        "INSERT INTO syllabi (id, revision, learner_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
-        (syllabus.id, syllabus.revision, learner_id, syllabus.model_dump_json(), _now()),
+        "INSERT INTO syllabi (id, revision, learner_id, topic_id, body, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (syllabus.id, syllabus.revision, learner_id, topic_id, syllabus.model_dump_json(), _now()),
     )
 
 
@@ -277,6 +357,19 @@ def _lesson(conn: sqlite3.Connection, learner_id: str, lesson_id: str) -> Lesson
 
 
 _ATTEMPTS = "SELECT id, lesson_id, number, body FROM attempts"
+
+
+def _in_topic(
+    conn: sqlite3.Connection, learner_id: str, topic_id: str | None
+) -> tuple[str, tuple[str, ...]]:
+    """A WHERE clause for `_ATTEMPTS`: the learner's attempts, at the topic's lessons if given."""
+    if topic_id is None:
+        return "learner_id = ?", (learner_id,)
+    topic_row(conn, learner_id, topic_id)
+    return (
+        "learner_id = ? AND lesson_id IN (SELECT id FROM lessons WHERE topic_id = ?)",
+        (learner_id, topic_id),
+    )
 
 
 def _graded(conn: sqlite3.Connection, learner_id: str, row: sqlite3.Row) -> GradedAttempt:
