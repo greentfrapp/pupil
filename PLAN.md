@@ -217,7 +217,8 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
     `POST /api/topics/{id}/prepare`. A running job is reported from memory, so it shows the
     moment the run starts.
   - The fake backend's scripted calls can take a function of earlier outputs, for ids the app
-    assigns. A billed live test of a real placement run was added but not run.
+    assigns. A billed live test of a real placement run passes: Claude, given only the
+    brief, wrote a placement lesson that the run's checks accepted.
   - **Left for step 4:** the screens, "I don't know", and the rationale shown with the plan.
 
 ### Step 4: topic path
