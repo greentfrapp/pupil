@@ -168,8 +168,8 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
     still shuffles questions and multiple-choice options.
   - Client: each question type has its own input component in `components/inputs/`, which
     reports a whole response or none; `grading.ts` gains the new types and `responseText`.
-  - Not verified: the new inputs in a browser, and the billed live schema test (now asking
-    for every question type).
+  - The billed live test passes: Claude fills in `create_lesson` with a teach card and every
+    question type. Not verified: the new inputs in a browser.
 
 ### Step 3: agent runs
 - **Topics:** a `topics` table (id, learner, the line they typed, created). Everything else
