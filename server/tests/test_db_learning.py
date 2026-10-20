@@ -1,3 +1,4 @@
+import asyncio
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -6,6 +7,7 @@ import pytest
 
 from pupil_server.db import LOCAL_LEARNER, AlreadyExists, Database, NotFound
 from pupil_server.db.learning import (
+    AlreadyAnswered,
     AttemptRepo,
     EvidenceRepo,
     QuizRepo,
@@ -222,10 +224,11 @@ async def test_evidence_is_oldest_first_and_per_syllabus(db: Database):
     await syllabi.create(ME, syllabus())
     await syllabi.create(ME, syllabus("syl_2"))
     await quizzes.create(ME, quiz())
+    await quizzes.create(ME, quiz("quiz_1b"))
     await quizzes.create(ME, quiz("quiz_2", syllabus_id="syl_2"))
     later = T0 + timedelta(days=1)
     await attempts.submit(ME, attempt("att_late", at=later, q1=ChoiceResponse(option_ids=["b"])))
-    await attempts.submit(ME, attempt("att_early", q1=ChoiceResponse(option_ids=["a"])))
+    await attempts.submit(ME, attempt("att_early", "quiz_1b", q1=ChoiceResponse(option_ids=["a"])))
     await attempts.submit(ME, attempt("att_other", "quiz_2", q2=BoolResponse(value=True)))
 
     evidence = await EvidenceRepo(db).for_syllabus(ME, "syl_1")
@@ -257,3 +260,20 @@ async def test_attempt_ids_are_unique(db: Database):
     await attempts.submit(ME, attempt(quiz_id="quiz_p"))
     with pytest.raises(AlreadyExists, match="attempt 'att_1' already exists"):
         await attempts.submit(ME, attempt(quiz_id="quiz_p"))
+
+
+async def test_a_quiz_is_answered_once_even_when_submitted_together(db: Database):
+    await QuizRepo(db).create(ME, quiz("quiz_p", syllabus_id=None))
+    attempts = AttemptRepo(db)
+    outcomes = await asyncio.gather(
+        attempts.submit(ME, attempt("att_1", "quiz_p", q2=BoolResponse(value=True))),
+        attempts.submit(ME, attempt("att_2", "quiz_p", q2=BoolResponse(value=False))),
+        return_exceptions=True,
+    )
+    assert isinstance(outcomes[1], AlreadyAnswered)
+    assert (await attempts.for_quiz(ME, "quiz_p")).id == "att_1"
+
+
+async def test_an_unanswered_quiz_has_no_attempt(db: Database):
+    await QuizRepo(db).create(ME, quiz("quiz_p", syllabus_id=None))
+    assert await AttemptRepo(db).for_quiz(ME, "quiz_p") is None

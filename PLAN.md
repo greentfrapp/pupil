@@ -229,10 +229,11 @@ questions one at a time. (The tutor's prompt already asks for this.)
   - Tools can set `hide_input`; `create_quiz` does. The conversation service blanks those
     tools' inputs before streaming or saving them. Transcripts saved before this change may
     still hold answer keys.
-  - **A quiz is answered once.** A second submission is refused (409), and `GET` returns the
-    results instead, so a reload shows the results rather than a fresh quiz. Results include
-    the learner's answer and the explanation, but not the correct answer, which the
-    explanation can give.
+  - **A quiz is answered once.** `AttemptRepo.submit` enforces this in the same transaction as
+    the insert, so simultaneous submissions can't both land. A second submission is refused
+    (409), and `GET` returns the results instead, so a reload shows the results rather than a
+    fresh quiz. Results include the learner's answer and the explanation, but not the correct
+    answer, which the explanation can give.
   - **`submit_quiz_answers` is dropped,** so the agent can't record answers itself.
   - `POST /api/conversations/{id}/quiz-results` takes an attempt id; the app writes the
     message from the stored attempt (`describe_attempt`: the score, and what the learner

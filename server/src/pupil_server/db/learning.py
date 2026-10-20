@@ -19,6 +19,10 @@ class StaleRevision(ValueError):
     """A syllabus change was based on a revision that is no longer the latest."""
 
 
+class AlreadyAnswered(ValueError):
+    """The quiz has an attempt already; each quiz is answered once."""
+
+
 class SyllabusRepo:
     """Each change to a syllabus is stored as a new revision; the latest is the current plan."""
 
@@ -122,14 +126,17 @@ class AttemptRepo:
     async def submit(self, learner_id: str, attempt: QuizAttempt) -> list[QuestionResult]:
         """Grade an attempt and store it with its results, all or nothing.
 
-        For a quiz tied to a syllabus, each result also becomes evidence for every objective
-        its question tests.
+        A quiz is answered once, so a second attempt at it is refused. For a quiz tied to a
+        syllabus, each result also becomes evidence for every objective its question tests.
         """
 
         def work(conn: sqlite3.Connection) -> list[QuestionResult]:
             quiz = _quiz(conn, learner_id, attempt.quiz_id)
             if conn.execute("SELECT 1 FROM attempts WHERE id = ?", (attempt.id,)).fetchone():
                 raise AlreadyExists(f"attempt {attempt.id!r} already exists")
+            # Checked in the same transaction as the insert, so two submissions can't both pass.
+            if conn.execute("SELECT 1 FROM attempts WHERE quiz_id = ?", (quiz.id,)).fetchone():
+                raise AlreadyAnswered(f"quiz {quiz.id!r} has already been answered")
             results = grade_attempt(quiz, attempt)
             at = timestamp(attempt.submitted_at)
             conn.execute(
@@ -183,17 +190,16 @@ class AttemptRepo:
 
         return await self._db.run(work)
 
-    async def for_quiz(self, learner_id: str, quiz_id: str) -> list[QuizAttempt]:
-        """The quiz's attempts, oldest first."""
+    async def for_quiz(self, learner_id: str, quiz_id: str) -> QuizAttempt | None:
+        """The learner's attempt at the quiz, or None if they haven't answered it yet."""
 
-        def work(conn: sqlite3.Connection) -> list[QuizAttempt]:
+        def work(conn: sqlite3.Connection) -> QuizAttempt | None:
             _quiz(conn, learner_id, quiz_id)
-            rows = conn.execute(
-                "SELECT body FROM attempts WHERE learner_id = ? AND quiz_id = ? "
-                "ORDER BY submitted_at, rowid",
+            row = conn.execute(
+                "SELECT body FROM attempts WHERE learner_id = ? AND quiz_id = ?",
                 (learner_id, quiz_id),
-            )
-            return [QuizAttempt.model_validate_json(r["body"]) for r in rows]
+            ).fetchone()
+            return QuizAttempt.model_validate_json(row["body"]) if row else None
 
         return await self._db.run(work)
 
