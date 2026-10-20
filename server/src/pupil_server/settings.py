@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    # Syllabi, quizzes, attempts and learner progress.
+    # Syllabi, lessons, attempts and learner progress.
     db_path: Path = Field(default_factory=_default_db_path)
 
     # Which agent runtime serves chat sessions; "fake" needs no model or credentials.

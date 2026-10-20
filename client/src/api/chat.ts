@@ -8,17 +8,7 @@ export type AgentEvent =
 
 // Mirrors pupil_server.conversations.transcript.TranscriptItem: agent events as they were
 // streamed, with each run of text merged into one text_delta.
-export type TranscriptItem =
-  | { type: 'user_message'; text: string }
-  | {
-      type: 'quiz_results'
-      quiz_id: string
-      attempt_id: string
-      correct: number
-      total: number
-      text: string
-    }
-  | AgentEvent
+export type TranscriptItem = { type: 'user_message'; text: string } | AgentEvent
 
 export interface Conversation {
   conversation_id: string
@@ -58,15 +48,6 @@ export function sendMessage(
   onEvent: (event: AgentEvent) => void,
 ): Promise<void> {
   return streamTurn(`/api/conversations/${id}/messages`, { text }, onEvent)
-}
-
-/** Tell the agent how a quiz went, and stream its reply. */
-export function reportQuizResults(
-  id: string,
-  attemptId: string,
-  onEvent: (event: AgentEvent) => void,
-): Promise<void> {
-  return streamTurn(`/api/conversations/${id}/quiz-results`, { attempt_id: attemptId }, onEvent)
 }
 
 async function streamTurn(

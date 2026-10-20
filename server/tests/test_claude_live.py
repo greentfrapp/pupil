@@ -45,7 +45,7 @@ async def test_one_turn_with_a_tool_call(tmp_path):
 
 
 async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
-    # The question union becomes a oneOf/$defs/$ref schema; check Claude takes it.
+    # The lesson item union becomes a oneOf/$defs/$ref schema; check Claude takes it.
     db = await Database.open(tmp_path / "pupil.db")
     session = await ClaudeBackend(workdir=tmp_path).open_session(
         AgentConfig(
@@ -58,8 +58,9 @@ async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
         events = [
             e
             async for e in session.send(
-                "Create a placement quiz on arithmetic with one multiple choice question, one "
-                "true/false question, one numeric question and one text match question."
+                "Create a syllabus on arithmetic with one unit, then a lesson for it with a "
+                "teach card, one multiple choice question, one true/false question, one numeric "
+                "question and one text match question."
             )
         ]
     finally:
@@ -68,7 +69,7 @@ async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
 
     calls = {e.id: e.name for e in events if isinstance(e, ToolCall)}
     succeeded = {calls[e.id] for e in events if isinstance(e, ToolResult) and not e.is_error}
-    assert "create_quiz" in succeeded
+    assert "create_lesson" in succeeded
 
 
 def test_a_conversation_resumes_after_a_restart(tmp_path):

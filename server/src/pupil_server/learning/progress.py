@@ -16,6 +16,9 @@ class Evidence(BaseModel):
 
     objective_id: str
     attempt_id: str
+    attempt_number: int
+    """1 for the learner's first attempt at the lesson. Retries test recall of answers already
+    shown, so may count for less."""
     question_id: str
     correct: bool
     at: AwareDatetime

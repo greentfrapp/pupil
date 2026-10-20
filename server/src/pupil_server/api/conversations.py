@@ -11,15 +11,8 @@ from pydantic import AwareDatetime, BaseModel
 
 from pupil_server.agents.sessions import SessionBusy
 from pupil_server.conversations.service import Conversations
-from pupil_server.conversations.transcript import (
-    Prompt,
-    QuizResults,
-    TranscriptItem,
-    UserMessage,
-)
+from pupil_server.conversations.transcript import Prompt, TranscriptItem, UserMessage
 from pupil_server.db import LOCAL_LEARNER, NotFound
-from pupil_server.db.learning import AttemptRepo, QuizRepo
-from pupil_server.learning.quiz import describe_attempt
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -38,10 +31,6 @@ class ConversationWithTranscript(ConversationOut):
 
 class MessageIn(BaseModel):
     text: str
-
-
-class QuizResultsIn(BaseModel):
-    attempt_id: str
 
 
 def _conversations(request: Request) -> Conversations:
@@ -86,33 +75,6 @@ async def send_message(
     conversation_id: str, body: MessageIn, request: Request
 ) -> StreamingResponse:
     return await _turn(request, conversation_id, UserMessage(text=body.text))
-
-
-@router.post("/{conversation_id}/quiz-results")
-async def report_quiz_results(
-    conversation_id: str, body: QuizResultsIn, request: Request
-) -> StreamingResponse:
-    """Tell the agent how the learner did on a quiz, and stream its reply.
-
-    The app writes the message from the stored attempt, so the agent hears exactly what was
-    graded.
-    """
-    db = request.app.state.db
-    attempts = AttemptRepo(db)
-    try:
-        attempt = await attempts.get(LEARNER, body.attempt_id)
-        results = await attempts.results(LEARNER, body.attempt_id)
-        quiz = await QuizRepo(db).get(LEARNER, attempt.quiz_id)
-    except NotFound:
-        raise HTTPException(404, "no such attempt") from None
-    prompt = QuizResults(
-        quiz_id=quiz.id,
-        attempt_id=attempt.id,
-        correct=sum(r.correct for r in results),
-        total=len(results),
-        text=describe_attempt(quiz, attempt, results),
-    )
-    return await _turn(request, conversation_id, prompt)
 
 
 async def _turn(request: Request, conversation_id: str, prompt: Prompt) -> StreamingResponse:

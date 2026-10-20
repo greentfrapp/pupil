@@ -1,255 +1,234 @@
-# Plan: learning models, database, agent tools and conversations
+# Plan: quiz-first learning, without a chat
 
-Pupil adapts teaching to the learner's zone of proximal development. This plan covers the core
-domain types and the work that builds on them:
+Pupil should feel like Duolingo: short, playful lessons that teach mostly by asking, not by
+lecturing. The learner never chats with the agent. The agent still plans and adapts everything,
+but it reaches the learner through structured screens it fills in with tools: a path, lessons,
+proposals and short answers.
 
-- **Quizzes** assess the learner: placement at the start (which shapes the syllabus) and
-  checkpoints later (what they've learned).
-- **Syllabi** are the learning roadmap for one topic. The learner and the agent plan with it and
-  keep revising it.
+## Built so far
 
-The work is split into four branches. Each can be merged on its own and builds on the one before.
+- **Models** (`learning/`): syllabi with units, objectives and prerequisites; quizzes with
+  multiple choice, true/false, numeric and text-match questions; grading; evidence types.
+- **Storage** (`db/`): SQLite with migrations; append-only syllabi (one row per revision),
+  quizzes, attempts, per-question results and per-objective evidence, all scoped by
+  `learner_id`.
+- **Agent tools** (`learning/tools.py`): `create_syllabus`, `revise_syllabus`, `get_syllabus`,
+  `list_syllabi` and `create_quiz`. Objective ids are assigned and checked by the server.
+- **Conversations** (`conversations/`): saved transcripts, resume tokens and reopening a
+  session after a restart. Tool inputs can be hidden (`hide_input`), which keeps answer keys
+  off the client.
+- **Quiz screen:** quizzes served without answers, one attempt per quiz (enforced in the
+  submit transaction), and results reported to the agent as a `quiz_results` message.
+- **Client:** a chat box with a quiz modal. The chat goes away in this plan.
+
+## Design
+
+### Still holds
+- **Progress is kept separate from the syllabus.** Mastery and "what's next" are computed from
+  evidence, never stored on the syllabus, so revising the plan doesn't lose what the learner
+  has shown they know.
+- **Objective ids are stable:** a reworded skill keeps its id; a different skill gets a new one.
+- **Answers never go through the agent.** The lesson player grades them, by code, and the
+  server stores the results as given, without grading again. It checks that an attempt fits
+  the lesson and keeps the learner's responses, so results could be regraded if grading had a
+  bug. The answer key is sent to the client with the lesson.
+
+### New
+- **No chat, and no long-running conversation.** Each job the agent does is a fresh, one-off
+  run: intake, planning the syllabus, the next lesson, answering "Ask about this". A run gets
+  instructions for its job, a short brief built from the database, and the tools it needs.
+  Nothing is resumed, so cost per lesson stays flat, restarts don't matter, and runs don't
+  queue behind each other. Runs are logged for debugging but never replayed to the agent.
+- **What the agent knows comes from the database:** the syllabus, evidence (and mastery, from
+  step 6), past lessons and their results, a **profile** per topic (setup answers, and
+  preferences from feedback) and **notes** the agent writes with a tool ("prefers
+  real-world examples"). Anything from free text must be written down this way, or it's
+  forgotten.
+- **Teach through questions.** The default is to teach inside the question ("In Python, `//`
+  divides and rounds down. What is `7 // 2`?"). A one-screen **teach card** is allowed before
+  a brand-new concept, sparingly.
+- **Duolingo-style lessons:** a lesson takes 1–3 minutes. After each question the learner sees
+  whether they were right, the correct answer and a short explanation; a question is never
+  retried on its own. Once a lesson is finished it can be retried as a whole, rerunning the
+  same questions shuffled where order doesn't matter, so nothing is generated again. Quitting
+  part-way means starting again; there is nothing to resume. We don't try hard to stop
+  learners gaming lessons; it only hurts their own learning.
+- **Results are pulled by the agent, not pushed to it.** Finishing a lesson doesn't start an
+  agent run. Results are read when the agent next has a job, such as preparing a lesson or
+  revising the syllabus, so it sees everything since its last run at once.
+- **Learners steer by tapping, not typing:** setup questions, one-tap lesson feedback, and
+  syllabus changes proposed as cards to accept or skip. The one free-text box is "Ask about
+  this", tied to the question or explanation on screen.
+
+### Known limits
+| Limit | Plan |
+|---|---|
+| Brand-new concepts can't be guessed into | Teach cards, kept short and rare |
+| Open-ended skills (writing, argument, design) can't be graded by our question types | LLM-graded free text with a rubric (later): costs money, adds latency, can be inconsistent |
+| Multiple choice tests recognition, not production | Fill in the blank, ordering and matching (step 2); maybe running code later |
+| Generated answer keys can be wrong | "Report a problem" and answer-key correction (later); maybe a second model check at creation |
+| Lots of quick questions can stay shallow | "Why?" questions, interleaving, spaced review (step 6) |
+| Generating a lesson takes seconds to tens of seconds | Generate the next lesson in the background (step 3) |
+| The agent only knows what the brief and notes tell it | Keep the brief complete but bounded; review what it holds as steps land |
+| Physical skills | Quizzes cover the theory only; accepted |
 
 ## Roadmap
 
+Each step is its own branch, can be merged on its own and builds on the ones before.
+
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
-| 1 | `base-types` | Syllabus, quiz/question and progress models, plus grading. Pure Python with tests: no database, tools or API. | — | Done (not merged) |
-| 2 | `db` | SQLite foundation (`Database`, migrations, startup wiring), `learner_id`, and repositories for syllabi, quizzes, attempts and evidence | 1 | Done (not merged) |
-| 3 | `learning-tools` | Agent tools on top of the repositories, wired into the demo tutor, plus a billed live test of the tool schemas | 2 | Done (not merged) |
-| 4 | `conversations` | Saved transcripts, and reopening a conversation after a restart using its resume token | 2 (can run in parallel with 3) | Done (not merged) |
-| 5 | `quiz-ui` | Quiz-taking interface: quizzes served without answers, the answer key kept out of the chat stream, answers submitted by the UI, and results sent back to the agent | 3, 4 | Done (not merged) |
+| 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done (not merged) |
+| 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Not started |
+| 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Not started |
+| 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Not started |
+| 5 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 4 | Not started |
+| 6 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 4 | Not started |
 
-## Design: progress is kept separate from the syllabus
-
-- The syllabus is only the plan. Units contain **objectives with stable ids** and list
-  prerequisite units.
-- Questions list the objective ids they test. Grading an attempt produces per-objective
-  **evidence**.
-- Mastery, unit status and "what's next" (unmastered units whose prerequisites are mastered,
-  i.e. the zone of proximal development) are computed from the evidence; they are never stored
-  on the syllabus. Step 1 adds only the progress **types**; the computing comes later.
-- **Why:** the agent can revise units without losing what the learner has shown they know, and
-  mastery can be traced back to specific answers.
-- **The rule the agent must follow:** a reworded skill keeps its objective id; a different skill
-  gets a new id. This rule goes in the tool descriptions in step 3.
-- **Placement quizzes may have no syllabus.** Their questions then have no tags, and their
-  results inform the syllabus design directly.
-
-## Step 1: models (`server/src/pupil_server/learning/`)
-
-### `syllabus.py`
-
-- `Objective(id, text)`
-- `Unit(id, title, summary, objectives: list[Objective] (≥1), prerequisites: list[str] = [], estimated_minutes: int | None)`
-- `Syllabus(id, topic, goal, units (≥1), revision: int = 1)`. A model validator checks that unit
-  ids and objective ids are unique, that prerequisites name existing units, and that there are
-  **no cycles**. Its error names the offending ids, so the agent can fix them.
-- `Syllabus.units_in_order()` returns units in prerequisite order (stable, keeping the authored
-  order where possible). `objective_ids()` returns all objective ids.
-
-### `quiz.py`
-
-- **Questions** are a union told apart by `kind`, all sharing
-  `id, prompt, objective_ids: list[str] = [], difficulty: int (1–5), explanation: str | None`:
-  - `MultipleChoice(kind="multiple_choice", options: list[Option(id, text)] (≥2), correct: list[str] (≥1), multiple: bool = False)`.
-    Validation: option ids are unique, every correct id is a real option, and a single-answer
-    question has exactly one correct option.
-  - `TrueFalse(kind="true_false", answer: bool)`
-  - `Numeric(kind="numeric", answer: float, tolerance: float = 0 (≥0), unit: str | None)`
-  - `TextMatch(kind="text_match", accepted: list[str] (≥1), case_sensitive: bool = False)`.
-    Before comparing, answers are trimmed and runs of whitespace are collapsed (and case is
-    ignored unless `case_sensitive`).
-- **Responses** mirror the question types: `ChoiceResponse(option_ids)`, `BoolResponse(value)`,
-  `NumberResponse(value)` and `TextResponse(text)`, also told apart by `kind`.
-- **Grading:** each question has `grade(response) -> bool`, and a response of the wrong kind
-  raises `TypeError`.
-  - Multiple choice: the set of chosen ids must equal the set of correct ids.
-  - Numeric: `abs(value - answer) <= tolerance`.
-- **Quizzes:** `Quiz(id, title, purpose: Literal["placement", "checkpoint"], syllabus_id: str | None, questions (≥1))`,
-  with unique question ids. A checkpoint quiz needs a `syllabus_id`, and a quiz without one
-  can't have tagged questions. `Quiz.check_tags(syllabus)` makes sure every question has at least
-  one tag and every tag exists in the syllabus. Step 2 calls it when storing a syllabus-linked
-  quiz.
-- **Attempts:** `QuizAttempt(id, quiz_id, responses: dict[str, Response], submitted_at)` and
-  `QuestionResult(question_id, correct, objective_ids)`. `grade_attempt(quiz, attempt) -> list[QuestionResult]`
-  rejects unknown question ids and counts unanswered questions as incorrect.
-
-### `progress.py` (types only)
-
-- `Evidence(objective_id, attempt_id, question_id, correct, at)`
-- `Mastery = Literal["unknown", "learning", "mastered"]`
-- `ObjectiveProgress(objective_id, mastery: Mastery = "unknown", evidence: list[Evidence] = [])`
-- `LearnerProgress(learner_id, syllabus_id, objectives: dict[str, ObjectiveProgress])`
-
-### Tests (`server/tests/`)
-
-- **`test_learning_syllabus.py`:**
-  - A valid syllabus is accepted.
-  - These are rejected, each with a message naming the offending ids: duplicate unit ids,
-    duplicate objective ids, an unknown prerequisite, a cycle (including a unit that requires
-    itself).
-  - `units_in_order` respects prerequisites and otherwise keeps the authored order.
-- **`test_learning_quiz.py`:**
-  - Multiple-choice validation: a single-answer question with two correct options, an unknown
-    correct id, duplicate option ids.
-  - Grading, right and wrong, for each type: multiple choice with single and multiple answers
-    (a subset of the right answers is wrong), true/false, numeric exactly at its tolerance and
-    just past it, text normalisation and case sensitivity.
-  - A response of the wrong kind raises an error.
-  - `grade_attempt` handles unanswered questions and rejects unknown ids.
-  - A checkpoint quiz without a syllabus, and tags on a quiz without one, are rejected.
-  - `check_tags` catches unknown tags and untagged questions.
-  - A response told apart by `kind` survives conversion to JSON and back. These are shaped by
-    our own validators, and the database stores them as JSON in step 2.
-
-### Commits
-
-1. Syllabus models and tests
-2. Quiz, question and progress models, grading and tests
-
-## Decisions for later steps
-
-### Step 2: database
-
-- **Storage:** append-only tables. A syllabus revision is a new row, and quizzes, attempts and
-  evidence are never updated. Whole documents (a syllabus revision, a quiz) are stored as
-  pydantic JSON in `body` columns; anything queried per item (evidence, results) gets its own
-  table.
-- **Access:** the standard library's `sqlite3` with repository classes. Rather than
-  `asyncio.to_thread`, `Database` keeps its one connection on a single worker thread, so calls
-  never overlap, even when the request awaiting one is cancelled. Each call is one transaction.
-  Migrations are numbered SQL files (`db/migrations/NNNN_name.sql`) tracked by
-  `PRAGMA user_version`, and a database newer than the code is refused.
-- **Learners:** `learner_id` on every record, with the local learner (`lrn_local`) seeded at
-  startup. Every repository method takes the learner and sees only their records.
-- **Conventions:** ids are prefixed random strings (`lrn_`, `syl_`, `quiz_`, `att_`, `conv_`),
-  made with `new_id`, and timestamps are ISO 8601 UTC text. Model timestamps must have a
-  timezone.
-- **As built (`db/learning.py`):**
-  - `SyllabusRepo`: `create` stores revision 1. `revise` stores the next revision, and refuses
-    a change based on a revision that is no longer the latest (`StaleRevision`). `get` returns
-    the latest or a given revision, and `list_latest` lists the learner's syllabi.
-  - `QuizRepo`: `create` checks a syllabus quiz's tags against the latest revision.
-  - `AttemptRepo`: `submit` grades an attempt and stores it, with a `question_results` row
-    per question and, for a syllabus quiz, an `evidence` row per tagged objective, in one
-    transaction. `get` and `results` read them back.
-  - `EvidenceRepo.for_syllabus` lists the evidence, oldest first. Mastery is still to come.
-  - Missing records raise `NotFound` and reused ids raise `AlreadyExists`.
-
-### Step 3: agent tools
-
-- `create_syllabus`, `revise_syllabus` (whose description states the objective-id rule),
-  `get_syllabus`, `create_quiz` and `submit_quiz_answers` (graded in code, never by the model).
-- Validation errors go back to the agent as error tool results, so it can correct itself.
-- **Risk:** the question union produces a JSON schema with `oneOf`, `$defs` and `$ref`. Claude
-  must accept that as a tool input schema; the live test checks it. If it fails, inline the
-  schema so it has no `$ref`s.
-- **As built (`learning/tools.py`):**
-  - `learning_tools(db, learner_id)` builds the tools for one learner. The tools assign ids
-    and timestamps, so the agent never makes them up.
-  - Added `list_syllabi`, so a new conversation can find the learner's existing syllabi.
-  - `revise_syllabus` takes the whole syllabus plus `based_on_revision`; a stale revision comes
-    back as an error telling the agent to read it again.
-  - Model field docstrings appear as descriptions in the tool schemas, and unknown fields are
-    refused rather than ignored.
-  - **The objective-id rule is checked, not just described.** Code can't tell whether new
-    wording is the same skill, so these checks guard the cases that lose or misattribute
-    progress:
-    - New objectives get their ids from the tools; the agent leaves the id out. Keeping an
-      objective means copying its id, and an id not in the current revision is refused.
-    - An objective the learner has evidence on can only be dropped by listing it in
-      `retired_objectives`; otherwise the revision is refused. Objectives without evidence
-      can be dropped freely.
-    - `revise_syllabus` returns the objectives added, reworded and removed, and warns when an
-      objective with evidence was reworded, asking the agent to confirm it is the same skill.
-  - The demo tutor gets the tools for the local learner, and its prompt describes the loop:
-    placement quiz, syllabus, checkpoints, revisions.
-  - The live test (`pytest -m live`) asks Claude to create a quiz with every question type
-    and submit answers to it. It passed, so Claude accepts the schemas as they are and no
-    inlining is needed.
-
-### Step 4: conversations
-
-- Each conversation's resume token and its syllabus link are stored, along with **full
-  transcripts**: the user's messages, plus the agent's events with each run of streamed text
-  merged into one item.
-- A conversation that exists in the database but not in memory (after a restart) is reopened
-  with its stored resume token.
+### Step 1: lessons
+- **Model: the quiz type is extended and renamed to `Lesson`.** A lesson is an ordered list of
+  items, each a question (the existing union) or a teach card (title, short text). Attempts
+  and evidence carry over. The rename covers the `quizzes` table, the API and the tools.
+- **Purposes are `placement` and `lesson`** (`review` comes in step 6); checkpoint quizzes are
+  dropped until a "test out of this unit" is wanted. A placement lesson has no teach cards
+  (checked by the model) and can't be retried; redoing placement means starting the topic
+  again.
+- **Taking a lesson:** the lesson comes with its answer key, and the player grades each answer
+  as it's given, showing whether it was right, the correct answer and the explanation. When
+  the lesson ends, the player submits every answer with its grade as one attempt; the server
+  checks it fits the lesson and stores it without grading again. A quit lesson stores nothing.
+- **Correct answers for the learner:** the player describes each question type's answer for
+  display: the correct option(s), the number with its unit, or the first accepted text.
+- **Explanations are required and short** (a sentence or two), and shown after every answer,
+  right or wrong, so a lucky guess still teaches.
+- **Retries:** the one-attempt rule is dropped. A finished lesson can be retried as a new
+  attempt. Option ids don't change, so shuffling doesn't affect grading.
+- **Shuffling respects order where it matters.** Teach cards stay in place and questions are
+  shuffled only between them, so a card still comes before the questions that use it. A
+  lesson whose questions build on each other is marked to keep its order. A multiple-choice
+  question whose options depend on position ("All of the above") is marked to keep its
+  option order.
+- **Every attempt counts as evidence,** so improvement shows. Attempts are numbered per lesson,
+  so first attempts can be told from retries, which test recall of answers already shown. How
+  much each counts towards mastery is decided in step 6.
+- **Schema:** the `quizzes` table becomes `lessons`, stored bodies hold `items` rather than
+  `questions`, and attempts are numbered per lesson. Attempts are still written once, when
+  submitted, so the tables stay append-only. **Existing data is reset, not migrated:** the
+  migrations are squashed into a new `0001`, and an old database is refused as too new
+  (`DatabaseTooNew`) until `~/Pupil/pupil.db` is deleted.
+- **Results aren't reported to the agent.** The `quiz_results` message and its endpoint are
+  removed. While the chat remains, the agent reads results with a tool (e.g. `recent_results`)
+  when the learner asks for the next lesson; from step 3 they go in the run's brief.
+- **Agent tool:** `create_lesson` replaces `create_quiz`, with guidance on teaching in the
+  question, using teach cards sparingly, keeping explanations short, and marking lessons and
+  questions whose order matters.
+- **Client:** a full-screen lesson player with a progress bar, a check button, and after each
+  answer whether it was right, the correct answer and the explanation; then a results screen
+  with a Retry button.
 - **As built:**
-  - Tables (`0002_conversations.sql`): `conversations`, `transcript_items` (one row per item,
-    numbered in order) and `resume_tokens` (one row per new token; the latest per backend
-    wins, since a token only means something to the backend that issued it).
-  - `ConversationRepo` (`db/conversations.py`) and the `Conversations` service
-    (`conversations/service.py`), which records each turn as it streams and reopens sessions.
-    Text is saved when a run ends, and what was said is kept even if the client goes away
-    mid-turn.
-  - Agent sessions open with a conversation's first message, and reopen from the latest
-    token whenever a message arrives with no live session. If the backend can't resume, a
-    fresh session starts: the transcript is kept, but the agent has no memory of it.
-  - The API moved from `/api/chat/sessions` to `/api/conversations`: `POST` to start,
-    `GET` to list (newest first), `GET /{id}` for the transcript, `POST /{id}/messages` to
-    stream a turn, and `DELETE /{id}/session` to release the live session while keeping the
-    conversation.
-  - The client remembers its conversation in `localStorage`, rebuilds the chat from the
-    transcript on load, and has a New chat button.
-  - **Deferred: the syllabus link.** Nothing reads it yet, and when to set it (at start,
-    when the agent creates a syllabus, or by the learner) is best decided with the syllabus
-    view.
-  - **Known gaps:** transcripts include `create_quiz` inputs, so they carry answer keys, like
-    the live stream (fixed in step 5). Reloading the page leaves the live session open until
-    the next New chat or shutdown, which is harmless because the reload picks the same
-    conversation back up.
+  - `learning/lesson.py` replaces `quiz.py`: `Lesson` (`items`, `keep_order`), `TeachCard`,
+    `MultipleChoice.keep_option_order`, a required `explanation`, `Attempt` (an `Answer` of
+    response and grade per question) and `GradedAttempt` (attempt, number, results). The
+    server no longer grades: `check_attempt` makes sure an attempt answers every question
+    with the right kind of response, and takes objective ids from the lesson.
+  - `shuffled(lesson, rng)` shuffles questions between teach cards, and options unless kept in
+    order.
+  - `LessonRepo`; `AttemptRepo.submit` numbers attempts in the same transaction as the insert
+    and raises `PlacementTaken` for a second placement attempt; `get`, `for_lesson` and
+    `recent` return graded attempts. Evidence has `attempt_number`.
+  - API: `GET /api/lessons/{id}` (the shuffled lesson with its answers, and attempt summaries)
+    and `POST /api/lessons/{id}/attempts` (201; 409 for a retaken placement; 422 for an
+    attempt that doesn't fit).
+  - Tools: `create_lesson` and `recent_results` (newest first, each described with its
+    attempt number). The conversation `quiz-results` endpoint, the `quiz_results` transcript
+    item and `hide_input` are gone.
+  - Client: `grading.ts` (`grade`, `answerText`) with Vitest tests (`pnpm test`);
+    `LessonPlayer.vue` replaces `QuizRunner.vue`; the chat shows a Start the lesson button
+    under `create_lesson`.
+  - The billed live test passes: Claude fills in `create_lesson`'s schema, teach card
+    included. Not verified: the player in a browser.
 
-### Step 5: quiz UI
+### Step 2: question types
+- Fill in the blank (typed or picked from a word bank), ordering (put steps in order) and
+  matching (pair items). Each needs a model and a response check on the server, and grading,
+  a description of its correct answer and an input in the player.
 
-Quizzes are taken in their own interface, not in the chat. The agent writes the whole quiz in
-one `create_quiz` call, tells the learner it is ready and ends its turn. The UI then shows the
-questions one at a time. (The tutor's prompt already asks for this.)
+### Step 3: agent runs
+- **Topics:** a `topics` table (id, learner, the line they typed, created). Everything else
+  points at the topic, so the topic row never changes and the tables stay append-only: setup
+  answers, syllabi and lessons get a `topic_id` (the newest syllabus for a topic is its plan;
+  a placement lesson belongs to the topic before any syllabus exists), and so do feedback,
+  notes and runs. A topic's next lesson is ready when it has a lesson with no attempts.
+- **Profile and notes are per topic** for now; sharing them across topics can come later.
+- **One-off agent runs:** a brief built from the database for each job, the topic's profile,
+  and a tool for the agent to write notes.
+- **The brief holds what every run needs:** the profile, notes, the current syllabus, results
+  since the last run, and a one-line summary of each recent lesson. Details needed only
+  sometimes (a past lesson's questions, older evidence) are fetched with read tools.
+- **Run logs:** `conversations` becomes `runs`, each recording its job (intake, next lesson,
+  ask), topic, start and finish times and cost; `transcript_items` stays under runs. Kept for
+  debugging bad lessons and tracking cost, never replayed to the agent.
+- **Background generation:** when a topic has no unstarted lesson ready, a run prepares the
+  next one while the learner looks at their results. Its brief holds the results since the
+  last run, and the same run can revise the syllabus. The client learns when it's ready.
+  **At most one generation run per topic at a time:** a request that would start another
+  while one is going waits for it instead. One server process, so an in-memory marker per
+  topic is enough.
+- Testable end to end with the fake backend before any new screens exist.
 
-- **Quizzes without answers:** `GET /api/quizzes/{id}` returns the learner's view of a quiz,
-  without `correct`, `answer`, `accepted` or `explanation` fields. Explanations come back with
-  the results.
-- **Keeping the answer key out of the chat stream:** today every `tool_call` event carries the
-  tool's full input, so `create_quiz` would send the answers to the browser. Its input is
-  stripped from the stream, and the client opens the quiz from the `quiz_id` in the tool result.
-- **Answers come from the UI:** `POST /api/quizzes/{id}/attempts` grades and stores them with
-  `AttemptRepo.submit`, and returns each question's result and explanation. The agent never
-  relays answers, so it can't alter them. `submit_quiz_answers` stays for chat-only use, or is
-  dropped.
-- **Results go back to the agent:** when the learner finishes, the app sends the results into
-  the conversation as the next message (e.g. "Quiz finished: 3 of 5 right; q2 and q4 wrong"), so
-  the agent can explain mistakes and revise the syllabus. This needs messages the learner didn't
-  type, which builds on step 4's transcripts.
-- **Client:** a quiz component with one screen per question type, and TypeScript types for the
-  learner's view of a quiz and for results.
-- **As built:**
-  - `learner_view` (`learning/quiz.py`) lists the fields a learner may see, rather than
-    removing the answer fields, so an answer field added later stays hidden by default.
-  - Tools can set `hide_input`; `create_quiz` does. The conversation service blanks those
-    tools' inputs before streaming or saving them. Transcripts saved before this change may
-    still hold answer keys.
-  - **A quiz is answered once.** `AttemptRepo.submit` enforces this in the same transaction as
-    the insert, so simultaneous submissions can't both land. A second submission is refused
-    (409), and `GET` returns the results instead, so a reload shows the results rather than a
-    fresh quiz. Results include the learner's answer and the explanation, but not the correct
-    answer, which the explanation can give.
-  - **`submit_quiz_answers` is dropped,** so the agent can't record answers itself.
-  - `POST /api/conversations/{id}/quiz-results` takes an attempt id; the app writes the
-    message from the stored attempt (`describe_attempt`: the score, and what the learner
-    answered for each wrong question). It is saved as a `quiz_results` transcript item.
-  - Client: `QuizRunner.vue` opens from a Take the quiz button under the tutor's message.
-    It shows one question at a time and, after submitting, the results. Meanwhile the chat
-    reports them to the agent and streams its reply.
-  - **Not done:** replacing a quiz (`create_quiz(replaces=...)`) and correcting a wrong
-    answer key after an attempt, both discussed and deferred.
+### Step 4: topic path
+- **Intake:** the learner types what they want to learn, then answers fixed setup questions
+  written into the app, not by the agent (instant and free), one per screen. The answers go
+  in the brief as structured fields, and the agent's instructions say what each answer
+  changes:
+  1. **"Why are you learning this?"** Shapes the syllabus's units, their order, and the kind
+     of question.
+     | Answer | Syllabus | Lessons |
+     |---|---|---|
+     | For work | Practical tasks first; theory only as needed | Realistic scenarios, "what would you do" questions |
+     | For a course or exam | The standard curriculum, in its usual order | Exam-style questions and wording |
+     | To build something | Ordered by what the project needs next | Questions framed around the project |
+     | Curiosity | Big ideas and intuition first; broad rather than deep | "Why" questions, surprising facts |
+  2. **"How far do you want to go?"** Sets the syllabus's size and depth: a quick overview (a
+     few units on the key ideas, easier questions), solid working knowledge (a full syllabus
+     to confident everyday use), or deep expertise (advanced units and edge cases, harder
+     questions).
+  3. **"How much do you know already?"** Decides placement: new to this (no placement; start
+     at the beginning), the basics (placement from basics to intermediate), or knows it well
+     (placement from intermediate up).
+  4. **"Anything specific?"** Optional free text, e.g. "AP Calculus BC" or "a Discord bot".
+- **After placement, the plan is shown back** with a line saying why it looks that way
+  ("Exam-focused, 6 units, starting from functions since you know the basics").
+- **Placement:** a placement lesson, with an **"I don't know"** button counted as wrong so
+  learners don't guess their way too far ahead. Feedback after each answer is as in any
+  lesson. Placement has no syllabus, so it gives no evidence; its results go in the brief for
+  the run that writes the syllabus.
+- **Path screen:** the syllabus as a path of units with the next lesson highlighted, and a list
+  of topics to switch between.
+- **Removed:** the chat UI, typed-message endpoints, and resuming conversations (resume tokens,
+  the session store, reopening sessions after a restart).
 
-## Other gaps, not yet scheduled
+### Step 5: steering
+- **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More
+  examples", "More real-world"), saved to the learner profile and in the next brief.
+- **Syllabus proposals:** a `propose_revision` tool whose change is shown as a card ("Add a unit
+  on window functions?"); accepting applies it through the existing revision checks. The
+  learner can also ask for more on a unit or to skip one.
+- **"Ask about this":** a one-off run answering a question about what's on screen, shown as a
+  short answer card. No follow-up questions, as in Duolingo. If the question reveals something
+  lasting ("keeps confusing joins and unions"), the run writes a note.
 
-- **Evolving stored JSON:** stored bodies must stay readable as the models change. Model changes
-  must be backward-compatible, or a migration must rewrite the stored JSON.
-- **Learner data:** export and deletion, since this is a consumer app holding learner
-  transcripts. Also backups of `~/Pupil/pupil.db`.
+### Step 6: review
+- Mastery per objective computed from evidence, shown on the path, deciding how much retries
+  count compared with first attempts.
+- Review lessons that bring back weak or due objectives, scheduled by spaced repetition.
+
+## Later, not yet scheduled
+- **LLM-graded free-text answers** with a rubric, for open-ended skills. These are graded on
+  the server, unlike the other question types.
+- **Wrong answer keys:** "Report a problem", correcting a key after an attempt, and replacing a
+  lesson; maybe a second model check when a lesson is created.
+- **Engagement:** streaks, daily goals, XP.
+- **Evolving stored JSON:** stored bodies must stay readable as the models change.
+- **Learner data:** export, deletion and backups of `~/Pupil/pupil.db`.
 - **Remote mode:** authentication, and mapping requests to a `learner_id`.
-- **UI:** a transcript view, a syllabus view, and TypeScript types for these models. The
-  quiz-taking UI is step 5.
