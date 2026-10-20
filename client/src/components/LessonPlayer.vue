@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   getLesson,
+  RequestFailed,
   submitAttempt,
   type Answer,
   type AttemptSummary,
@@ -24,7 +25,12 @@ const busy = ref(false)
 // at the end.
 const index = ref(0)
 const answers = ref<Record<string, Answer>>({})
-const result = ref<AttemptSummary | null>(null)
+const finished = ref(false)
+
+// Saving the finished attempt. The results come from the answers graded here, so they show
+// whether or not saving works.
+const saved = ref<AttemptSummary | null>(null)
+const saveProblem = ref<{ message: string; canRetry: boolean } | null>(null)
 
 // What the learner has entered for the current question, in the form each input edits.
 const picked = ref<string[]>([])
@@ -39,24 +45,26 @@ const question = computed(() =>
 const feedback = computed(() => {
   const q = question.value
   const answer = q && answers.value[q.id]
-  if (!q || !answer) return null
+  if (finished.value || !q || !answer) return null
   return { correct: answer.correct, answer: answerText(q), explanation: q.explanation }
 })
 const isLast = computed(() => index.value === (lesson.value?.items.length ?? 0) - 1)
 const progress = computed(() => {
   const total = lesson.value?.items.length ?? 1
   const done = index.value + (feedback.value || !question.value ? 1 : 0)
-  return result.value ? 100 : (done / total) * 100
+  return finished.value ? 100 : (done / total) * 100
 })
 /** A placement lesson can't be retried, so once taken it only shows how it went. */
 const taken = computed(
-  () => !result.value && lesson.value?.purpose === 'placement' && attempts.value.length > 0,
+  () => !finished.value && lesson.value?.purpose === 'placement' && attempts.value.length > 0,
 )
 
 async function load() {
   error.value = null
   lesson.value = null
-  result.value = null
+  finished.value = false
+  saved.value = null
+  saveProblem.value = null
   index.value = 0
   answers.value = {}
   clearInputs()
@@ -109,27 +117,46 @@ function check() {
   answers.value[q.id] = { response: r, correct: grade(q, r) }
 }
 
-async function next() {
-  if (busy.value || result.value) return
-  if (!isLast.value) {
-    index.value++
-    clearInputs()
+function next() {
+  if (finished.value) return
+  if (isLast.value) {
+    finished.value = true
+    save()
     return
   }
+  index.value++
+  clearInputs()
+}
+
+async function save() {
+  if (busy.value || saved.value) return
   busy.value = true
-  error.value = null
+  saveProblem.value = null
   try {
-    result.value = await submitAttempt(props.lessonId, answers.value)
+    saved.value = await submitAttempt(props.lessonId, answers.value)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    saveProblem.value = problem(e)
   } finally {
     busy.value = false
   }
 }
 
+/** What to tell the learner when saving fails, and whether trying again could help. */
+function problem(e: unknown): { message: string; canRetry: boolean } {
+  if (e instanceof RequestFailed && e.status === 409) {
+    const message = "You've already taken this placement, so this attempt wasn't saved."
+    return { message, canRetry: false }
+  }
+  const message = `This attempt couldn't be saved: ${e instanceof Error ? e.message : e}`
+  // The server refused it (4xx), so sending it again would be refused again. Anything else,
+  // such as the server being unreachable, may pass on another try.
+  const refused = e instanceof RequestFailed && e.status < 500
+  return { message, canRetry: !refused }
+}
+
 /** Enter checks the answer, then moves on. */
 function onEnter() {
-  if (!lesson.value || result.value || taken.value) return
+  if (!lesson.value || finished.value || taken.value) return
   if (feedback.value || !question.value) next()
   else check()
 }
@@ -152,7 +179,7 @@ function describe(q: Question, r: LessonResponse | null): string {
 
 /** Every question, in the order taken, with how the learner did. */
 const results = computed(() => {
-  if (!lesson.value || !result.value) return []
+  if (!lesson.value || !finished.value) return []
   return lesson.value.items
     .filter((i): i is Question => i.kind !== 'teach_card')
     .map((q) => {
@@ -177,6 +204,8 @@ const footerStyle = computed(() => {
   if (!feedback.value) return 'border-gray-100'
   return feedback.value.correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
 })
+const secondaryClass =
+  'rounded-xl border-2 border-gray-200 px-6 py-3 text-lg font-semibold hover:bg-gray-50 disabled:opacity-40'
 const buttonClass =
   'rounded-xl px-6 py-3 text-lg font-semibold text-white disabled:opacity-40 bg-blue-600 hover:bg-blue-700'
 </script>
@@ -213,14 +242,12 @@ const buttonClass =
       </template>
 
       <!-- Results, once the lesson is finished -->
-      <template v-else-if="result">
+      <template v-else-if="finished">
         <h2 class="text-2xl font-bold">Lesson complete!</h2>
         <p class="text-lg">
-          You got <strong>{{ result.correct }} of {{ result.total }}</strong> right<span
-            v-if="result.number > 1"
-          >
-            on attempt {{ result.number }}</span
-          >.
+          You got
+          <strong>{{ results.filter((r) => r.correct).length }} of {{ results.length }}</strong>
+          right<span v-if="saved && saved.number > 1"> on attempt {{ saved.number }}</span>.
         </p>
         <ol class="flex flex-col gap-2">
           <li
@@ -304,28 +331,39 @@ const buttonClass =
           <p v-if="!feedback.correct" class="font-medium">Answer: {{ feedback.answer }}</p>
           <p class="text-gray-700">{{ feedback.explanation }}</p>
         </div>
-        <p v-if="error" class="text-red-600">{{ error }}</p>
-
-        <div v-if="result" class="flex justify-end gap-2">
-          <button
-            v-if="lesson.purpose === 'lesson'"
-            class="rounded-xl border-2 border-gray-200 px-6 py-3 text-lg font-semibold hover:bg-gray-50"
-            @click="load"
-          >
-            Retry
-          </button>
-          <button :class="buttonClass" @click="emit('close')">Done</button>
-        </div>
+        <template v-if="finished">
+          <p v-if="busy" class="text-gray-500">Saving…</p>
+          <p v-else-if="saveProblem" class="text-red-600">{{ saveProblem.message }}</p>
+          <div class="flex justify-end gap-2">
+            <button
+              v-if="saveProblem?.canRetry"
+              :disabled="busy"
+              :class="secondaryClass"
+              @click="save"
+            >
+              Try saving again
+            </button>
+            <button
+              v-if="lesson.purpose === 'lesson'"
+              :disabled="busy"
+              :class="secondaryClass"
+              @click="load"
+            >
+              Retry lesson
+            </button>
+            <button :class="buttonClass" @click="emit('close')">Done</button>
+          </div>
+        </template>
         <button
           v-else-if="question && !feedback"
-          :disabled="!response || busy"
+          :disabled="!response"
           :class="[buttonClass, 'self-end']"
           @click="check"
         >
           Check
         </button>
-        <button v-else :disabled="busy" :class="[buttonClass, 'self-end']" @click="next">
-          {{ isLast ? (busy ? 'Finishing…' : 'Finish') : 'Continue' }}
+        <button v-else :class="[buttonClass, 'self-end']" @click="next">
+          {{ isLast ? 'Finish' : 'Continue' }}
         </button>
       </div>
     </footer>

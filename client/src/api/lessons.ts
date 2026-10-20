@@ -81,9 +81,19 @@ export interface AttemptSummary {
   submitted_at: string
 }
 
-async function failure(res: Response): Promise<Error> {
+/** The server answered, but refused the request. */
+export class RequestFailed extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+  }
+}
+
+async function failure(res: Response): Promise<RequestFailed> {
   const body = await res.json().catch(() => null)
-  return new Error(body?.detail ?? `HTTP ${res.status}`)
+  return new RequestFailed(body?.detail ?? `HTTP ${res.status}`, res.status)
 }
 
 /** The lesson with its answers, shuffled afresh, and the learner's attempts so far. */
