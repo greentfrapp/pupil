@@ -2,6 +2,8 @@
 // answers: the player grades each answer itself (see ../grading.ts), and the server stores the
 // results it's sent.
 
+import { getJson, postJson } from './http'
+
 export interface Option {
   id: string
   text: string
@@ -105,6 +107,7 @@ export type LessonResponse =
 
 /** The learner's answer to one question, as the player graded it. */
 export interface Answer {
+  /** Null if the learner said they didn't know. */
   response: LessonResponse | null
   correct: boolean
 }
@@ -117,28 +120,11 @@ export interface AttemptSummary {
   submitted_at: string
 }
 
-/** The server answered, but refused the request. */
-export class RequestFailed extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message)
-  }
-}
-
-async function failure(res: Response): Promise<RequestFailed> {
-  const body = await res.json().catch(() => null)
-  return new RequestFailed(body?.detail ?? `HTTP ${res.status}`, res.status)
-}
-
 /** The lesson with its answers, shuffled afresh, and the learner's attempts so far. */
 export async function getLesson(
   id: string,
 ): Promise<{ lesson: Lesson; attempts: AttemptSummary[] }> {
-  const res = await fetch(`/api/lessons/${id}`)
-  if (!res.ok) throw await failure(res)
-  return res.json()
+  return getJson(`/api/lessons/${id}`)
 }
 
 /** Store a finished attempt: an answer for every question, as the player graded it. */
@@ -146,11 +132,5 @@ export async function submitAttempt(
   id: string,
   answers: Record<string, Answer>,
 ): Promise<AttemptSummary> {
-  const res = await fetch(`/api/lessons/${id}/attempts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ answers }),
-  })
-  if (!res.ok) throw await failure(res)
-  return res.json()
+  return postJson(`/api/lessons/${id}/attempts`, { answers })
 }
