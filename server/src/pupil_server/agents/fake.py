@@ -43,16 +43,11 @@ def _default_turn(text: str) -> Turn:
 
 
 class FakeSession:
-    def __init__(self, config: AgentConfig, script: list[Turn], token: str) -> None:
+    def __init__(self, config: AgentConfig, script: list[Turn]) -> None:
         self._tools = {t.name: t for t in config.tools}
         self._script = script
-        self._token = token
         self.received: list[str] = []
         self.closed = False
-
-    @property
-    def resume_token(self) -> str | None:
-        return self._token
 
     async def send(self, text: str) -> AsyncIterator[AgentEvent]:
         self.received.append(text)
@@ -89,14 +84,10 @@ class FakeBackend:
     def __init__(self, script: Sequence[Turn] = ()) -> None:
         self._script = list(script)
         self.sessions: list[FakeSession] = []
-        self.resumed: list[str] = []
-        """The resume tokens sessions were opened with, in order."""
 
-    async def open_session(self, config: AgentConfig, resume: str | None = None) -> FakeSession:
+    async def open_session(self, config: AgentConfig) -> FakeSession:
         check_capabilities(self, config)
-        if resume:
-            self.resumed.append(resume)
-        # Sessions share the backend's script, so a test can script a whole conversation.
-        session = FakeSession(config, self._script, resume or uuid.uuid4().hex)
+        # Sessions share the backend's script, so a test can script several runs in order.
+        session = FakeSession(config, self._script)
         self.sessions.append(session)
         return session

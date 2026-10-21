@@ -146,16 +146,6 @@ async def test_syllabus_ids_are_unique_and_must_exist(db: Database):
         await repo.get(ME, "syl_1", revision=2)
 
 
-async def test_list_latest(db: Database):
-    repo = SyllabusRepo(db)
-    await repo.create(ME, syllabus("syl_a"))
-    await repo.create(ME, syllabus("syl_b"))
-    await repo.revise(ME, syllabus("syl_a", goal="revised"))
-    await repo.create(OTHER, syllabus("syl_c"))
-    listed = await repo.list_latest(ME)
-    assert [(s.id, s.revision) for s in listed] == [("syl_a", 2), ("syl_b", 1)]
-
-
 async def test_another_learners_records_are_not_found(db: Database):
     syllabi, lessons, attempts = SyllabusRepo(db), LessonRepo(db), AttemptRepo(db)
     await syllabi.create(ME, syllabus())

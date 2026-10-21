@@ -74,14 +74,14 @@ def test_result_maps_to_completion_or_error():
 
 
 def test_options_isolate_the_agent(tmp_path: Path):
-    plain = build_options(AgentConfig(system_prompt="p", tools=[echo]), tmp_path, None)
+    plain = build_options(AgentConfig(system_prompt="p", tools=[echo]), tmp_path)
     assert plain.tools == []
     assert plain.allowed_tools == ["mcp__pupil__echo"]
     assert plain.setting_sources == [] and plain.strict_mcp_config
     assert plain.permission_mode == "dontAsk"
     assert plain.include_partial_messages  # translate() takes text only from stream deltas
 
-    web = build_options(AgentConfig(system_prompt="p", web_search=True), tmp_path, None)
+    web = build_options(AgentConfig(system_prompt="p", web_search=True), tmp_path)
     assert set(web.tools) == {"WebSearch", "WebFetch"}
     # Under dontAsk, a tool that is available but not allowed is always denied.
     assert {"WebSearch", "WebFetch"} <= set(web.allowed_tools)

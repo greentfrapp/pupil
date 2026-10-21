@@ -21,8 +21,14 @@ async def db(tmp_path: Path):
 
 
 @pytest.fixture
-def call(db: Database):
-    tools = {t.name: t for t in learning_tools(db, LOCAL_LEARNER)}
+async def topic_id(db: Database) -> str:
+    profile = Profile(why="work", depth="working", level="basics")
+    return (await TopicRepo(db).create(LOCAL_LEARNER, "Python", profile)).id
+
+
+@pytest.fixture
+def call(db: Database, topic_id: str):
+    tools = {t.name: t for t in learning_tools(db, LOCAL_LEARNER, topic_id)}
 
     async def call(name: str, **arguments: Any) -> ToolResult:
         return await tools[name].invoke("call_1", arguments)
@@ -138,11 +144,11 @@ async def test_create_syllabus_refuses_objective_ids(call):
     assert "invalid arguments" in result.output
 
 
-async def test_an_invalid_syllabus_comes_back_as_an_error(call, db: Database):
+async def test_an_invalid_syllabus_comes_back_as_an_error(call, db: Database, topic_id: str):
     result = await call("create_syllabus", **{**PLAN, "units": [unit("a", "b"), unit("b", "a")]})
     assert result.is_error
     assert "prerequisite cycle: a -> b -> a" in result.output
-    assert await SyllabusRepo(db).list_latest(LOCAL_LEARNER) == []
+    assert await SyllabusRepo(db).for_topic(LOCAL_LEARNER, topic_id) is None
 
 
 async def test_revise_syllabus_needs_the_revision_it_was_based_on(call):
@@ -227,18 +233,11 @@ async def test_revise_refuses_unknown_and_contradictory_objective_ids(call):
     assert f"retired objectives are still in the syllabus: ['{basics_id}']" in contradictory.output
 
 
-async def test_get_and_list_syllabi(call):
+async def test_get_syllabus(call):
     syllabus = await create(call)
 
     got = await call("get_syllabus", syllabus_id=syllabus["id"])
     assert got.output == syllabus
-
-    listed = await call("list_syllabi")
-    assert listed.output == {
-        "syllabi": [
-            {"syllabus_id": syllabus["id"], "topic": "Python", "goal": PLAN["goal"], "revision": 1}
-        ]
-    }
 
     missing = await call("get_syllabus", syllabus_id="syl_nope")
     assert missing.is_error
@@ -306,49 +305,22 @@ async def test_recent_results_describe_the_latest_attempts(call, db: Database):
     ]
 
 
-# For a topic
+# The topic
 
 
-@pytest.fixture
-async def topic_id(db: Database) -> str:
-    profile = Profile(why="work", depth="working", level="basics")
-    return (await TopicRepo(db).create(LOCAL_LEARNER, "Python", profile)).id
-
-
-@pytest.fixture
-def call_for_topic(db: Database, topic_id: str):
-    tools = {t.name: t for t in learning_tools(db, LOCAL_LEARNER, topic_id)}
-
-    async def call(name: str, **arguments: Any) -> ToolResult:
-        return await tools[name].invoke("call_1", arguments)
-
-    return call
-
-
-async def test_what_a_topics_run_creates_is_filed_under_the_topic(
-    call_for_topic, db: Database, topic_id: str
-):
-    syllabus = await create(call_for_topic)
-    lesson_id = await create_lesson(call_for_topic, syllabus, "basics")
+async def test_what_a_run_creates_is_filed_under_its_topic(call, db: Database, topic_id: str):
+    syllabus = await create(call)
+    lesson_id = await create_lesson(call, syllabus, "basics")
     assert (await SyllabusRepo(db).for_topic(LOCAL_LEARNER, topic_id)).id == syllabus["id"]
     assert await LessonRepo(db).topic_of(LOCAL_LEARNER, lesson_id) == topic_id
 
 
-async def test_a_topics_run_can_keep_notes_and_read_past_lessons(
-    call_for_topic, db: Database, topic_id: str
-):
-    noted = await call_for_topic("add_note", text="prefers real-world examples")
+async def test_a_run_can_keep_notes_and_read_past_lessons(call, db: Database, topic_id: str):
+    noted = await call("add_note", text="prefers real-world examples")
     assert not noted.is_error
     notes = await TopicRepo(db).notes(LOCAL_LEARNER, topic_id)
     assert [n.text for n in notes] == ["prefers real-world examples"]
 
-    lesson_id = await create_lesson(call_for_topic, await create(call_for_topic), "basics")
-    read = await call_for_topic("get_lesson", lesson_id=lesson_id)
+    lesson_id = await create_lesson(call, await create(call), "basics")
+    read = await call("get_lesson", lesson_id=lesson_id)
     assert [q["id"] for q in read.output["items"]] == ["q1", "q2"]
-
-
-def test_only_a_topics_run_gets_note_and_lesson_reading_tools(db: Database, topic_id: str):
-    chat = {t.name for t in learning_tools(db, LOCAL_LEARNER)}
-    run = {t.name for t in learning_tools(db, LOCAL_LEARNER, topic_id)}
-    assert run - chat == {"add_note", "get_lesson"}
-    assert chat - run == {"list_syllabi"}

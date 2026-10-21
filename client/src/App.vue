@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import ChatBox from './components/ChatBox.vue'
 
 interface Health {
   status: string
@@ -47,7 +46,5 @@ onMounted(ping)
         Ping again
       </button>
     </div>
-    <h2 class="pt-4 text-xl font-semibold">Chat</h2>
-    <ChatBox />
   </main>
 </template>

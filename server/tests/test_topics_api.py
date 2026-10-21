@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 from pupil_server.agents import AgentConfig
 from pupil_server.agents.fake import Call, FakeBackend, FakeSession, Say
 from pupil_server.app import create_app
-from pupil_server.conversations.transcript import UserMessage
 from pupil_server.db import LOCAL_LEARNER
 from pupil_server.db.runs import RunRepo
+from pupil_server.runs.log import UserMessage
 from pupil_server.settings import Settings
 
 QUESTION = {
@@ -166,8 +166,8 @@ class Gated(FakeBackend):
         super().__init__([[Call("create_lesson", PLACEMENT)]])
         self.gate = asyncio.Event()
 
-    async def open_session(self, config: AgentConfig, resume: str | None = None) -> FakeSession:
-        session = await super().open_session(config, resume)
+    async def open_session(self, config: AgentConfig) -> FakeSession:
+        session = await super().open_session(config)
         send = session.send
 
         async def gated(text: str):

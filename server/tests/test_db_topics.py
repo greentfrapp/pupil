@@ -97,11 +97,11 @@ async def test_a_topics_lessons_are_listed_oldest_first(db: Database):
     topic = await TopicRepo(db).create(ME, "SQL", PROFILE)
     lessons = LessonRepo(db)
     await lessons.create(ME, lesson("les_1"), topic.id)
-    await lessons.create(ME, lesson("les_chat"))
+    await lessons.create(ME, lesson("les_no_topic"))
     await lessons.create(ME, lesson("les_2"), topic.id)
     assert [x.id for x in await lessons.for_topic(ME, topic.id)] == ["les_1", "les_2"]
     assert await lessons.topic_of(ME, "les_1") == topic.id
-    assert await lessons.topic_of(ME, "les_chat") is None
+    assert await lessons.topic_of(ME, "les_no_topic") is None
 
 
 async def test_attempts_since_a_time_are_the_topics_only(db: Database):
@@ -109,10 +109,10 @@ async def test_attempts_since_a_time_are_the_topics_only(db: Database):
     lessons, attempts = LessonRepo(db), AttemptRepo(db)
     await lessons.create(ME, lesson("les_1"), topic.id)
     await lessons.create(ME, lesson("les_2"), topic.id)
-    await lessons.create(ME, lesson("les_chat"))
+    await lessons.create(ME, lesson("les_no_topic"))
     await attempts.submit(ME, attempt("att_old", "les_1", T0))
     await attempts.submit(ME, attempt("att_new", "les_2", T0 + timedelta(hours=2)))
-    await attempts.submit(ME, attempt("att_chat", "les_chat", T0 + timedelta(hours=3)))
+    await attempts.submit(ME, attempt("att_no_topic", "les_no_topic", T0 + timedelta(hours=3)))
 
     since = await attempts.since(ME, topic.id, T0 + timedelta(hours=1))
     assert [g.attempt.id for g in since] == ["att_new"]

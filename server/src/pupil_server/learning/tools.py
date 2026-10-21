@@ -89,10 +89,6 @@ class SyllabusRef(_Input):
     """A past revision to read; leave out for the current one."""
 
 
-class NoArgs(_Input):
-    pass
-
-
 class LessonPlan(_Input):
     title: str
     purpose: Literal["placement", "lesson"]
@@ -137,13 +133,9 @@ def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
     ]
 
 
-def learning_tools(db: Database, learner_id: str, topic_id: str | None = None) -> list[Tool]:
-    """The tools, acting for one learner.
-
-    For a topic, what they create is filed under it, results are the topic's, and the agent
-    can read past lessons and keep notes. Without one (the chat), they range over all the
-    learner's syllabi.
-    """
+def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
+    """The tools for a run on one of the learner's topics: what they create is filed under the
+    topic, and the results they read are the topic's."""
     syllabi, lessons, evidence = SyllabusRepo(db), LessonRepo(db), EvidenceRepo(db)
     attempts, topics = AttemptRepo(db), TopicRepo(db)
 
@@ -230,15 +222,6 @@ def learning_tools(db: Database, learner_id: str, topic_id: str | None = None) -
         stored = await syllabi.get(learner_id, ref.syllabus_id, ref.revision)
         return stored.model_dump(mode="json")
 
-    @tool("list_syllabi", "List the learner's syllabi, oldest first.")
-    async def list_syllabi(_: NoArgs) -> dict[str, Any]:
-        return {
-            "syllabi": [
-                {"syllabus_id": s.id, "topic": s.topic, "goal": s.goal, "revision": s.revision}
-                for s in await syllabi.list_latest(learner_id)
-            ]
-        }
-
     @tool(
         "create_lesson",
         "Create a short lesson that teaches mostly by asking: 8 to 12 questions, or 10 to 15 "
@@ -270,7 +253,6 @@ def learning_tools(db: Database, learner_id: str, topic_id: str | None = None) -
         "remember anything else from this run.",
     )
     async def add_note(note: NewNote) -> dict[str, Any]:
-        assert topic_id is not None  # offered only for a topic
         await topics.add_note(learner_id, topic_id, note.text)
         return {"saved": True}
 
@@ -292,21 +274,12 @@ def learning_tools(db: Database, learner_id: str, topic_id: str | None = None) -
             )
         return {"attempts": described}
 
-    if topic_id is not None:
-        return [
-            create_syllabus,
-            revise_syllabus,
-            get_syllabus,
-            create_lesson,
-            get_lesson,
-            recent_results,
-            add_note,
-        ]
     return [
         create_syllabus,
         revise_syllabus,
         get_syllabus,
-        list_syllabi,
         create_lesson,
+        get_lesson,
         recent_results,
+        add_note,
     ]

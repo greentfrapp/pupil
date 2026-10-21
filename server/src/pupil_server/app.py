@@ -1,7 +1,7 @@
 """FastAPI application factory.
 
-Wiring only: the database and agent sessions are opened once at startup and closed in reverse
-order, so no session is still using the database when it closes.
+Wiring only: the database is opened once at startup, and the agent's runs are stopped before it
+closes, so no run is still using it.
 
 Routes live in `pupil_server.api`.
 """
@@ -17,12 +17,8 @@ from fastapi import FastAPI
 
 from pupil_server import __version__
 from pupil_server.agents import AgentBackend, make_backend
-from pupil_server.agents.demo import demo_config
-from pupil_server.agents.sessions import SessionStore
-from pupil_server.api import conversations, lessons, topics
-from pupil_server.conversations.service import Conversations
+from pupil_server.api import lessons, topics
 from pupil_server.db import Database, DatabaseTooNew
-from pupil_server.db.conversations import ConversationRepo
 from pupil_server.lock import DatabaseInUse, DatabaseLock
 from pupil_server.loop import LoopCannotSpawn, require_subprocess_support
 from pupil_server.runs.service import Runs
@@ -45,7 +41,6 @@ def create_app(
     config = settings or default_settings
     _configure_logging(config.log_level)
     backend = agent_backend or make_backend(config.agent_backend)
-    agents = SessionStore(backend)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -68,28 +63,22 @@ def create_app(
                 log.error("%s", exc)
                 raise
             app.state.db = db
-            app.state.conversations = Conversations(
-                agents, ConversationRepo(db), lambda learner_id: demo_config(db, learner_id)
-            )
             app.state.runs = runs = Runs(db, backend)
             try:
                 yield
             finally:
                 await runs.close()
-                await agents.close_all()
                 await db.close()
         finally:
             lock.release()
 
     app = FastAPI(title="Pupil", version=__version__, lifespan=lifespan)
     app.state.settings = config
-    app.state.agents = agents
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__, "mode": config.mode}
 
-    app.include_router(conversations.router)
     app.include_router(lessons.router)
     app.include_router(topics.router)
     return app

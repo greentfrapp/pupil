@@ -92,23 +92,6 @@ class SyllabusRepo:
 
         return await self._db.run(work)
 
-    async def list_latest(self, learner_id: str) -> list[Syllabus]:
-        """The learner's syllabi at their latest revisions, oldest syllabus first."""
-
-        def work(conn: sqlite3.Connection) -> list[Syllabus]:
-            rows = conn.execute(
-                """
-                SELECT body FROM syllabi AS s
-                WHERE learner_id = ?
-                  AND revision = (SELECT max(revision) FROM syllabi WHERE id = s.id)
-                ORDER BY (SELECT min(created_at) FROM syllabi WHERE id = s.id), id
-                """,
-                (learner_id,),
-            )
-            return [Syllabus.model_validate_json(r["body"]) for r in rows]
-
-        return await self._db.run(work)
-
     async def for_topic(self, learner_id: str, topic_id: str) -> Syllabus | None:
         """The topic's plan: the latest revision of its newest syllabus, if it has one."""
 
