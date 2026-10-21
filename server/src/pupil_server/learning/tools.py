@@ -21,6 +21,7 @@ from pupil_server.db.learning import (
     StaleRevision,
     SyllabusRepo,
 )
+from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.lesson import Item, Lesson, describe_attempt
 from pupil_server.learning.syllabus import Objective, Syllabus, Unit, objective_changes
 
@@ -113,6 +114,15 @@ class RecentResults(_Input):
     """How many of the latest attempts to read."""
 
 
+class LessonRef(_Input):
+    lesson_id: str
+
+
+class NewNote(_Input):
+    text: str = Field(min_length=1, max_length=500)
+    """One thing worth remembering about the learner, in a sentence."""
+
+
 def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
     """Units with an id for every objective, new ones getting a fresh one."""
     return [
@@ -127,10 +137,15 @@ def _units(units: list[NewUnit] | list[RevisedUnit]) -> list[Unit]:
     ]
 
 
-def learning_tools(db: Database, learner_id: str) -> list[Tool]:
-    """The tools, acting for one learner."""
+def learning_tools(db: Database, learner_id: str, topic_id: str | None = None) -> list[Tool]:
+    """The tools, acting for one learner.
+
+    For a topic, what they create is filed under it, results are the topic's, and the agent
+    can read past lessons and keep notes. Without one (the chat), they range over all the
+    learner's syllabi.
+    """
     syllabi, lessons, evidence = SyllabusRepo(db), LessonRepo(db), EvidenceRepo(db)
-    attempts = AttemptRepo(db)
+    attempts, topics = AttemptRepo(db), TopicRepo(db)
 
     @tool(
         "create_syllabus",
@@ -142,7 +157,7 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
         syllabus = Syllabus(
             id=new_id("syl"), topic=plan.topic, goal=plan.goal, units=_units(plan.units)
         )
-        stored = await syllabi.create(learner_id, syllabus)
+        stored = await syllabi.create(learner_id, syllabus, topic_id)
         return {"syllabus": stored.model_dump(mode="json")}
 
     @tool(
@@ -236,13 +251,28 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
         "before a brand-new idea, and rarely. After each answer the learner sees whether they "
         "were right, the correct answer and the explanation, so keep explanations to a "
         "sentence or two. Write the whole lesson in this one call. The learner takes it in the "
-        "app's lesson player, so don't repeat its questions or answers in the chat. Read how "
+        "app's lesson player, so don't repeat its questions or answers in your reply. Read how "
         "they did with recent_results.",
     )
     async def create_lesson(plan: LessonPlan) -> dict[str, Any]:
         lesson = Lesson(id=new_id("les"), **plan.model_dump())
-        await lessons.create(learner_id, lesson)
+        await lessons.create(learner_id, lesson, topic_id)
         return {"lesson_id": lesson.id}
+
+    @tool("get_lesson", "Read a past lesson in full: its questions and their answers.")
+    async def get_lesson(ref: LessonRef) -> dict[str, Any]:
+        return (await lessons.get(learner_id, ref.lesson_id)).model_dump(mode="json")
+
+    @tool(
+        "add_note",
+        "Write down something about the learner worth remembering in later runs, e.g. "
+        "'prefers real-world examples' or 'keeps confusing joins and unions'. You won't "
+        "remember anything else from this run.",
+    )
+    async def add_note(note: NewNote) -> dict[str, Any]:
+        assert topic_id is not None  # offered only for a topic
+        await topics.add_note(learner_id, topic_id, note.text)
+        return {"saved": True}
 
     @tool(
         "recent_results",
@@ -252,7 +282,7 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
     )
     async def recent_results(ask: RecentResults) -> dict[str, Any]:
         described = []
-        for graded in await attempts.recent(learner_id, ask.limit):
+        for graded in await attempts.recent(learner_id, ask.limit, topic_id):
             lesson = await lessons.get(learner_id, graded.attempt.lesson_id)
             described.append(
                 {
@@ -262,6 +292,16 @@ def learning_tools(db: Database, learner_id: str) -> list[Tool]:
             )
         return {"attempts": described}
 
+    if topic_id is not None:
+        return [
+            create_syllabus,
+            revise_syllabus,
+            get_syllabus,
+            create_lesson,
+            get_lesson,
+            recent_results,
+            add_note,
+        ]
     return [
         create_syllabus,
         revise_syllabus,

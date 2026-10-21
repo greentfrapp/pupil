@@ -80,7 +80,7 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 |---|---|---|---|---|
 | 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done (not merged) |
 | 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Done (not merged) |
-| 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Not started |
+| 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Done (not merged) |
 | 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Not started |
 | 5 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 4 | Not started |
 | 6 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 4 | Not started |
@@ -193,6 +193,33 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   while one is going waits for it instead. One server process, so an in-memory marker per
   topic is enough.
 - Testable end to end with the fake backend before any new screens exist.
+- **As built:**
+  - **Jobs:** `placement`, then `plan` (a syllabus and the first lesson; straight away for a
+    learner new to the topic), then `next_lesson` each time no lesson is waiting
+    (`runs/jobs.py`). Creating a topic or submitting an attempt at one of its lessons calls
+    `Runs.prepare`, which starts the job the topic needs unless a run is going or a lesson is
+    waiting. `POST /api/topics/{id}/prepare` does the same, e.g. to try again after a failure.
+  - **A run** (`runs/service.py`) is a fresh agent session: a system prompt saying how the
+    setup answers shape the work, then the brief as its one message. Its tools are the
+    learning tools for the topic: what they create is filed under it, `recent_results` is the
+    topic's, and `add_note` and `get_lesson` are added. Afterwards the run is checked for what
+    it should have made, and fails if it didn't (e.g. "the run didn't leave a lesson to take").
+    A run cut off by shutdown records that it was.
+  - **The brief** (`runs/brief.py`): the job, the request and setup answers, the notes, the
+    syllabus as JSON, results of attempts since the last successful run started (at most 20),
+    and a line on each of the 10 newest lessons.
+  - **Storage** (migration `0002`): `topics` (the setup answers are a `Profile` stored with the
+    topic, written once), `topic_id` on syllabi and lessons, `notes`, and `runs` with separate
+    `run_ends` and `run_items`, so nothing is updated. The conversations tables are left for
+    the chat until step 4 removes it, rather than renamed now.
+  - **API:** `POST/GET /api/topics`, `GET /api/topics/{id}` (syllabus, lessons with attempt
+    counts, `next_lesson_id`, and the last run's state: running, done or failed with why) and
+    `POST /api/topics/{id}/prepare`. A running job is reported from memory, so it shows the
+    moment the run starts.
+  - The fake backend's scripted calls can take a function of earlier outputs, for ids the app
+    assigns. A billed live test of a real placement run passes: Claude, given only the
+    brief, wrote a placement lesson that the run's checks accepted.
+  - **Left for step 4:** the screens, "I don't know", and the rationale shown with the plan.
 
 ### Step 4: topic path
 - **Intake:** the learner types what they want to learn, then answers fixed setup questions

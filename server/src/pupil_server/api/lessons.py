@@ -84,4 +84,8 @@ async def submit_attempt(lesson_id: str, body: AttemptIn, request: Request) -> A
     except (ValueError, TypeError) as exc:
         # Answers that don't fit the lesson: missing, extra, or of the wrong kind.
         raise HTTPException(422, str(exc)) from None
+    # A topic's next lesson is prepared while the learner looks at their results.
+    topic_id = await LessonRepo(request.app.state.db).topic_of(LEARNER, lesson_id)
+    if topic_id is not None:
+        await request.app.state.runs.prepare(LEARNER, topic_id)
     return _summary(graded)

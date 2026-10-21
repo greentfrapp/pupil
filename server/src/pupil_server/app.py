@@ -19,12 +19,13 @@ from pupil_server import __version__
 from pupil_server.agents import AgentBackend, make_backend
 from pupil_server.agents.demo import demo_config
 from pupil_server.agents.sessions import SessionStore
-from pupil_server.api import conversations, lessons
+from pupil_server.api import conversations, lessons, topics
 from pupil_server.conversations.service import Conversations
 from pupil_server.db import Database, DatabaseTooNew
 from pupil_server.db.conversations import ConversationRepo
 from pupil_server.lock import DatabaseInUse, DatabaseLock
 from pupil_server.loop import LoopCannotSpawn, require_subprocess_support
+from pupil_server.runs.service import Runs
 from pupil_server.settings import Settings
 from pupil_server.settings import settings as default_settings
 
@@ -43,7 +44,8 @@ def create_app(
 ) -> FastAPI:
     config = settings or default_settings
     _configure_logging(config.log_level)
-    agents = SessionStore(agent_backend or make_backend(config.agent_backend))
+    backend = agent_backend or make_backend(config.agent_backend)
+    agents = SessionStore(backend)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -69,9 +71,11 @@ def create_app(
             app.state.conversations = Conversations(
                 agents, ConversationRepo(db), lambda learner_id: demo_config(db, learner_id)
             )
+            app.state.runs = runs = Runs(db, backend)
             try:
                 yield
             finally:
+                await runs.close()
                 await agents.close_all()
                 await db.close()
         finally:
@@ -87,6 +91,7 @@ def create_app(
 
     app.include_router(conversations.router)
     app.include_router(lessons.router)
+    app.include_router(topics.router)
     return app
 
 

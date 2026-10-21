@@ -7,8 +7,10 @@ import pytest
 from pupil_server.agents import ToolResult
 from pupil_server.db import LOCAL_LEARNER, Database
 from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
+from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.lesson import Answer, Attempt, NumberResponse, TeachCard
 from pupil_server.learning.tools import learning_tools
+from pupil_server.learning.topic import Profile
 
 
 @pytest.fixture
@@ -302,3 +304,51 @@ async def test_recent_results_describe_the_latest_attempts(call, db: Database):
         "- q1: wrong, skipped",
         "- q2: right",
     ]
+
+
+# For a topic
+
+
+@pytest.fixture
+async def topic_id(db: Database) -> str:
+    profile = Profile(why="work", depth="working", level="basics")
+    return (await TopicRepo(db).create(LOCAL_LEARNER, "Python", profile)).id
+
+
+@pytest.fixture
+def call_for_topic(db: Database, topic_id: str):
+    tools = {t.name: t for t in learning_tools(db, LOCAL_LEARNER, topic_id)}
+
+    async def call(name: str, **arguments: Any) -> ToolResult:
+        return await tools[name].invoke("call_1", arguments)
+
+    return call
+
+
+async def test_what_a_topics_run_creates_is_filed_under_the_topic(
+    call_for_topic, db: Database, topic_id: str
+):
+    syllabus = await create(call_for_topic)
+    lesson_id = await create_lesson(call_for_topic, syllabus, "basics")
+    assert (await SyllabusRepo(db).for_topic(LOCAL_LEARNER, topic_id)).id == syllabus["id"]
+    assert await LessonRepo(db).topic_of(LOCAL_LEARNER, lesson_id) == topic_id
+
+
+async def test_a_topics_run_can_keep_notes_and_read_past_lessons(
+    call_for_topic, db: Database, topic_id: str
+):
+    noted = await call_for_topic("add_note", text="prefers real-world examples")
+    assert not noted.is_error
+    notes = await TopicRepo(db).notes(LOCAL_LEARNER, topic_id)
+    assert [n.text for n in notes] == ["prefers real-world examples"]
+
+    lesson_id = await create_lesson(call_for_topic, await create(call_for_topic), "basics")
+    read = await call_for_topic("get_lesson", lesson_id=lesson_id)
+    assert [q["id"] for q in read.output["items"]] == ["q1", "q2"]
+
+
+def test_only_a_topics_run_gets_note_and_lesson_reading_tools(db: Database, topic_id: str):
+    chat = {t.name for t in learning_tools(db, LOCAL_LEARNER)}
+    run = {t.name for t in learning_tools(db, LOCAL_LEARNER, topic_id)}
+    assert run - chat == {"add_note", "get_lesson"}
+    assert chat - run == {"list_syllabi"}
