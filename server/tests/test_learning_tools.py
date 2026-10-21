@@ -46,7 +46,12 @@ def unit(uid: str, *prerequisites: str) -> dict:
     }
 
 
-PLAN = {"topic": "Python", "goal": "Write small scripts", "units": [unit("basics"), unit("loops")]}
+PLAN = {
+    "topic": "Python",
+    "goal": "Write small scripts",
+    "rationale": "Practical first, since it's for work.",
+    "units": [unit("basics"), unit("loops")],
+}
 
 QUESTIONS = [
     {
@@ -95,12 +100,12 @@ async def create_lesson(call, syllabus: dict, unit_id: str) -> str:
 
 
 async def take(db: Database, lesson_id: str, attempt_id: str = "att_1", **answers) -> None:
-    """Submit an attempt at the lesson, skipping any question not given an answer."""
-    skipped = Answer(response=None, correct=False)
+    """Submit an attempt at the lesson, not knowing any question not given an answer."""
+    unknown = Answer(response=None, correct=False)
     attempt = Attempt(
         id=attempt_id,
         lesson_id=lesson_id,
-        answers={"q1": skipped, "q2": skipped, **answers},
+        answers={"q1": unknown, "q2": unknown, **answers},
         submitted_at=datetime.now(UTC),
     )
     await AttemptRepo(db).submit(LOCAL_LEARNER, attempt)
@@ -118,6 +123,7 @@ async def revise(call, syllabus: dict, units: list[dict], **extra: Any) -> ToolR
         based_on_revision=syllabus["revision"],
         topic=syllabus["topic"],
         goal=syllabus["goal"],
+        rationale=syllabus["rationale"],
         units=units,
         **extra,
     )
@@ -300,7 +306,7 @@ async def test_recent_results_describe_the_latest_attempts(call, db: Database):
     [latest] = result.output["attempts"]
     assert latest["summary"].splitlines() == [
         f"'Basics' ({lesson_id}), attempt 2: 1 of 2 right.",
-        "- q1: wrong, skipped",
+        "- q1: wrong, said they didn't know",
         "- q2: right",
     ]
 

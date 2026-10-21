@@ -67,6 +67,9 @@ class SyllabusPlan(_Input):
     topic: str
     goal: str
     """What the learner wants to be able to do by the end."""
+    rationale: str = Field(min_length=1, max_length=200)
+    """One line for the learner on why the plan looks the way it does, e.g. 'Exam-focused, 6
+    units, starting from functions since you know the basics.' Shown with the plan."""
     units: list[NewUnit] = Field(min_length=1)
     """Unit ids are short slugs, unique within the syllabus."""
 
@@ -77,6 +80,10 @@ class SyllabusChange(_Input):
     """The revision this change was made from, as get_syllabus returned it."""
     topic: str
     goal: str
+    rationale: str = Field(min_length=1, max_length=200)
+    """One line for the learner on why the plan looks the way it does, e.g. 'Exam-focused, 6
+    units, starting from functions since you know the basics.' Shown with the plan; update
+    it if the change alters why."""
     units: list[RevisedUnit] = Field(min_length=1)
     retired_objectives: list[str] = Field(default_factory=list)
     """Ids of objectives dropped because the learner no longer needs that skill. Required for
@@ -147,7 +154,11 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     )
     async def create_syllabus(plan: SyllabusPlan) -> dict[str, Any]:
         syllabus = Syllabus(
-            id=new_id("syl"), topic=plan.topic, goal=plan.goal, units=_units(plan.units)
+            id=new_id("syl"),
+            topic=plan.topic,
+            goal=plan.goal,
+            rationale=plan.rationale,
+            units=_units(plan.units),
         )
         stored = await syllabi.create(learner_id, syllabus, topic_id)
         return {"syllabus": stored.model_dump(mode="json")}
@@ -185,6 +196,7 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
             id=change.syllabus_id,
             topic=change.topic,
             goal=change.goal,
+            rationale=change.rationale,
             units=_units(change.units),
             revision=change.based_on_revision,
         )

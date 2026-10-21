@@ -56,8 +56,9 @@ INSTRUCTIONS: dict[Job, str] = {
     "plan": (
         "Create the syllabus for this topic with create_syllabus, sized and ordered by the "
         "setup answers, and starting where the placement results show the learner's knowledge "
-        "runs out (from the beginning if there was no placement). Then write their first "
-        "lesson with create_lesson, tied to the syllabus."
+        "runs out (from the beginning if there was no placement). The learner sees it next, "
+        "with its rationale: say in one plain line how their answers and placement shaped it. "
+        "Then write their first lesson with create_lesson, tied to the syllabus."
     ),
     "next_lesson": (
         "Write the learner's next lesson with create_lesson, tied to the topic's syllabus. "
