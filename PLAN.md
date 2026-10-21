@@ -270,8 +270,10 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
     are drawn faded and dashed, the cue for what isn't written yet. A footer says what's
     next: start it, "Writing your next lesson…" while a run goes (polled every 2 seconds),
     or the error with Try again. A finished lesson returns to the topic.
-  - No URLs or browser history: the app switches between screens itself. Not verified:
-    the screens in a browser, and a whole topic run with real Claude.
+  - No URLs or browser history: the app switches between screens itself.
+  - The billed live tests pass after the chat's removal: Claude fills in the learning
+    tools' schemas for a topic, and a real placement run works. Not verified: the screens
+    in a browser, and a plan run (with its rationale) with real Claude.
 
 ### Step 5: steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More
