@@ -313,7 +313,10 @@ brief, once even before they knew the lesson's id.
     shows its score and Go further above the path.
   - Lessons from before this change have no unit, so they're on no unit of the path; a
     database from step 4 should be reset (the migrations are squashed before release).
-  - Not verified: with real Claude, or in a browser.
+  - Billed live tests pass for the new runs: a plan run with a rationale, whose follow-up
+    run writes the second lesson for the next stop; and Go further on a finished topic,
+    which adds units after the existing ones and then writes their first lesson. Not
+    verified: in a browser.
 
 ### Step 5: steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More
