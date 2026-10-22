@@ -7,19 +7,15 @@ proposals and short answers.
 
 ## Built so far
 
-- **Models** (`learning/`): syllabi with units, objectives and prerequisites; quizzes with
-  multiple choice, true/false, numeric and text-match questions; grading; evidence types.
-- **Storage** (`db/`): SQLite with migrations; append-only syllabi (one row per revision),
-  quizzes, attempts, per-question results and per-objective evidence, all scoped by
-  `learner_id`.
-- **Agent tools** (`learning/tools.py`): `create_syllabus`, `revise_syllabus`, `get_syllabus`,
-  `list_syllabi` and `create_quiz`. Objective ids are assigned and checked by the server.
-- **Conversations** (`conversations/`): saved transcripts, resume tokens and reopening a
-  session after a restart. Tool inputs can be hidden (`hide_input`), which keeps answer keys
-  off the client.
-- **Quiz screen:** quizzes served without answers, one attempt per quiz (enforced in the
-  submit transaction), and results reported to the agent as a `quiz_results` message.
-- **Client:** a chat box with a quiz modal. The chat goes away in this plan.
+- **Models** (`learning/`): syllabi with units, objectives and prerequisites; lessons of
+  questions (seven types) and teach cards; attempts; topics with their setup answers.
+- **Storage** (`db/`): SQLite with migrations, append-only and scoped by `learner_id`:
+  topics, notes, syllabi (a row per revision), lessons, attempts, per-question results,
+  per-objective evidence, and the agent's runs with their logs.
+- **Agent runs** (`runs/`): one-off runs per topic (placement, plan, next lesson) with a
+  brief built from the database and the learning tools, at most one per topic at a time.
+- **Client:** a home screen of topics, the setup questions, a topic screen with the plan and
+  the path, and a lesson player that grades answers itself.
 
 ## Design
 
@@ -78,10 +74,10 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 
 | Step | Branch | Contents | Depends on | Status |
 |---|---|---|---|---|
-| 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done (not merged) |
-| 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Done (not merged) |
-| 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Done (not merged) |
-| 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Not started |
+| 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done |
+| 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Done |
+| 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Done |
+| 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Done (not merged) |
 | 5 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 4 | Not started |
 | 6 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 4 | Not started |
 
@@ -252,6 +248,32 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   of topics to switch between.
 - **Removed:** the chat UI, typed-message endpoints, and resuming conversations (resume tokens,
   the session store, reopening sessions after a restart).
+- **As built:**
+  - **Removed:** the chat (`ChatBox.vue`, `api/chat.ts`, the conversations endpoints and
+    package, the demo tutor), `SessionStore`, and resume tokens in the agent backends.
+    Migration `0003` drops the conversations tables. Run logs keep their items in
+    `runs/log.py`. The learning tools always act for a topic, so `list_syllabi` is gone.
+  - **The rationale:** `create_syllabus` and `revise_syllabus` take a required `rationale`,
+    one line for the learner, stored on the syllabus. The plan job asks for it.
+  - **"I don't know":** placement shows it next to Check; it's stored as an answer with no
+    response, counted wrong, and described to the agent as "said they didn't know".
+    Ordinary lessons don't offer it.
+  - **API:** a topic has a `path`: the syllabus's units in learning order, each with its
+    lessons. A lesson goes under the earliest unit it tests, so it appears once; placement
+    and lessons testing only retired objectives aren't on the path.
+  - **Client:** a home screen listing topics; the intake (the request, then the three
+    questions as tappable cards, then "Anything specific?"); and a topic screen in three
+    stages (`topicState.ts`, with tests). Before the plan, it shows the placement intro or
+    the score, or "Building your plan…". With a plan and no lesson taken yet, it shows the
+    goal, the rationale and the units, with "Start your first lesson". After that, it shows
+    the path: units with their lessons, the next one highlighted. Units with no lessons yet
+    are drawn faded and dashed, the cue for what isn't written yet. A footer says what's
+    next: start it, "Writing your next lesson…" while a run goes (polled every 2 seconds),
+    or the error with Try again. A finished lesson returns to the topic.
+  - No URLs or browser history: the app switches between screens itself.
+  - The billed live tests pass after the chat's removal: Claude fills in the learning
+    tools' schemas for a topic, and a real placement run works. Not verified: the screens
+    in a browser, and a plan run (with its rationale) with real Claude.
 
 ### Step 5: steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More

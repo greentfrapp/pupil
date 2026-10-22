@@ -411,7 +411,7 @@ class Answer(BaseModel):
     """The learner's answer to one question, as the lesson player graded it."""
 
     response: Response | None
-    """None if the learner skipped the question."""
+    """None if the learner said they didn't know."""
     correct: bool
 
 
@@ -463,7 +463,7 @@ def check_attempt(lesson: Lesson, attempt: Attempt) -> list[QuestionResult]:
         answer = attempt.answers[q.id]
         if answer.response is None:
             if answer.correct:
-                raise ValueError(f"question {q.id!r} was skipped, so can't be correct")
+                raise ValueError(f"question {q.id!r} has no answer, so can't be correct")
         else:
             q.check_response(answer.response)
         results.append(
@@ -482,7 +482,7 @@ def describe_attempt(lesson: Lesson, graded: GradedAttempt) -> str:
         if r.correct:
             lines.append(f"- {r.question_id}: right")
         elif response is None:
-            lines.append(f"- {r.question_id}: wrong, skipped")
+            lines.append(f"- {r.question_id}: wrong, said they didn't know")
         else:
             given = _describe_response(questions[r.question_id], response)
             lines.append(f"- {r.question_id}: wrong, answered {given}")

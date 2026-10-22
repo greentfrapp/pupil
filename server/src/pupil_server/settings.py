@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Syllabi, lessons, attempts and learner progress.
     db_path: Path = Field(default_factory=_default_db_path)
 
-    # Which agent runtime serves chat sessions; "fake" needs no model or credentials.
+    # Which agent runtime does the runs; "fake" needs no model or credentials.
     agent_backend: Literal["claude", "fake"] = "claude"
 
 

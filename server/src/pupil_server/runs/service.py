@@ -22,7 +22,6 @@ from pupil_server.agents.base import (
     TextDelta,
     TurnComplete,
 )
-from pupil_server.conversations.transcript import UserMessage
 from pupil_server.db import Database
 from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
 from pupil_server.db.runs import RunRepo
@@ -30,6 +29,7 @@ from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.tools import learning_tools
 from pupil_server.runs.brief import build_brief
 from pupil_server.runs.jobs import SYSTEM_PROMPT, Job, next_job
+from pupil_server.runs.log import UserMessage
 
 log = logging.getLogger(__name__)
 

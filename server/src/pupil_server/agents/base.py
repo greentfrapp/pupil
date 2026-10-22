@@ -113,12 +113,7 @@ class UnsupportedCapability(RuntimeError):
 
 
 class AgentSession(Protocol):
-    """One conversation. It keeps its own history between turns."""
-
-    @property
-    def resume_token(self) -> str | None:
-        """Opaque handle to reopen this conversation with `AgentBackend.open_session`."""
-        ...
+    """One session with the agent. It keeps its own history between turns."""
 
     def send(self, text: str) -> AsyncIterator[AgentEvent]:
         """Run one turn; the last event is `TurnComplete` or `AgentError`."""
@@ -133,9 +128,7 @@ class AgentBackend(Protocol):
     name: str
     supports_web_search: bool
 
-    async def open_session(
-        self, config: AgentConfig, resume: str | None = None
-    ) -> AgentSession: ...
+    async def open_session(self, config: AgentConfig) -> AgentSession: ...
 
 
 def check_capabilities(backend: AgentBackend, config: AgentConfig) -> None:

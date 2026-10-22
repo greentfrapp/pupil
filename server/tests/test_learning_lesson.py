@@ -346,9 +346,9 @@ def test_check_attempt_takes_the_grades_and_the_lessons_tags():
         ({"q1": SKIPPED}, "no answers to questions ['q2']"),
         ({"q1": SKIPPED, "q2": SKIPPED, "q9": SKIPPED}, "not in lesson 'les_1': ['q9']"),
         ({"q1": SKIPPED, "q2": wrong(TextResponse(text="no"))}, "needs a BoolResponse"),
-        ({"q1": SKIPPED, "q2": Answer(response=None, correct=True)}, "skipped, so can't be"),
+        ({"q1": SKIPPED, "q2": Answer(response=None, correct=True)}, "no answer, so can't be"),
     ],
-    ids=["missing", "unknown", "wrong-kind", "skipped-but-right"],
+    ids=["missing", "unknown", "wrong-kind", "unanswered-but-right"],
 )
 def test_check_attempt_refuses_attempts_that_dont_fit(answers, message):
     with pytest.raises((ValueError, TypeError), match=re.escape(message)):
@@ -376,7 +376,7 @@ def test_describe_attempt_says_what_the_learner_answered():
         "- q1: wrong, answered 'A'",
         "- q2: right",
         "- q3: wrong, answered 5 cm",
-        "- q4: wrong, skipped",
+        "- q4: wrong, said they didn't know",
         "- q5: right",
     ]
 

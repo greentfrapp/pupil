@@ -8,6 +8,7 @@ skill keeps its id, a different skill gets a new one.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -37,6 +38,8 @@ class Syllabus(BaseModel):
     topic: str = Field(min_length=1)
     goal: str = Field(min_length=1)
     """What the learner wants to be able to do by the end."""
+    rationale: str | None = None
+    """Why the plan looks the way it does, in a line for the learner."""
     units: list[Unit] = Field(min_length=1)
     revision: int = Field(default=1, ge=1)
 
@@ -69,6 +72,14 @@ class Syllabus(BaseModel):
             placed.add(unit.id)
             ordered.append(unit)
         return ordered
+
+    def first_unit_with(self, objective_ids: Iterable[str]) -> Unit | None:
+        """The earliest unit, in learning order, with any of these objectives."""
+        wanted = set(objective_ids)
+        return next(
+            (u for u in self.units_in_order() if any(o.id in wanted for o in u.objectives)),
+            None,
+        )
 
     def objective_ids(self) -> set[str]:
         return {o.id for u in self.units for o in u.objectives}

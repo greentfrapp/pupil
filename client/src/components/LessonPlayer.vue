@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { RequestFailed } from '../api/http'
 import {
   getLesson,
-  RequestFailed,
   submitAttempt,
   type Answer,
   type AttemptSummary,
@@ -51,7 +51,17 @@ const feedback = computed(() => {
   const q = question.value
   const answer = q && answers.value[q.id]
   if (finished.value || !q || !answer) return null
-  return { correct: answer.correct, answer: answerText(q), explanation: q.explanation }
+  const title = answer.correct
+    ? 'Correct!'
+    : answer.response
+      ? 'Not quite'
+      : "Here's the answer" // the learner said they didn't know
+  return {
+    correct: answer.correct,
+    title,
+    answer: answerText(q),
+    explanation: q.explanation,
+  }
 })
 const isLast = computed(() => index.value === (lesson.value?.items.length ?? 0) - 1)
 const progress = computed(() => {
@@ -90,6 +100,14 @@ function check() {
   const r = response.value
   if (!q || !r || feedback.value) return
   answers.value[q.id] = { response: r, correct: grade(q, r) }
+}
+
+/** Placement offers "I don't know", counted as wrong, so the learner doesn't guess their way
+ * too far ahead. */
+function dontKnow() {
+  const q = question.value
+  if (!q || feedback.value) return
+  answers.value[q.id] = { response: null, correct: false }
 }
 
 function next() {
@@ -147,7 +165,7 @@ const results = computed(() => {
         id: q.id,
         prompt: q.prompt,
         correct: answer.correct,
-        given: answer.response ? responseText(q, answer.response) : 'Skipped',
+        given: answer.response && responseText(q, answer.response),
         answer: answerText(q),
       }
     })
@@ -196,7 +214,9 @@ const buttonClass =
 
       <!-- Results, once the lesson is finished -->
       <template v-else-if="finished">
-        <h2 class="text-2xl font-bold">Lesson complete!</h2>
+        <h2 class="text-2xl font-bold">
+          {{ lesson.purpose === 'placement' ? 'Placement done!' : 'Lesson complete!' }}
+        </h2>
         <p class="text-lg">
           You got
           <strong>{{ results.filter((r) => r.correct).length }} of {{ results.length }}</strong>
@@ -215,7 +235,9 @@ const buttonClass =
               {{ r.prompt }}
             </p>
             <p v-if="!r.correct" class="text-sm text-gray-600">
-              You said {{ r.given }}; the answer is {{ r.answer }}.
+              <template v-if="r.given">You said {{ r.given }}; </template>
+              <template v-else>You didn't know; </template>
+              the answer is {{ r.answer }}.
             </p>
           </li>
         </ol>
@@ -284,7 +306,7 @@ const buttonClass =
       <div class="mx-auto flex max-w-xl flex-col gap-3">
         <div v-if="feedback">
           <p :class="['text-xl font-bold', feedback.correct ? 'text-green-700' : 'text-red-700']">
-            {{ feedback.correct ? 'Correct!' : 'Not quite' }}
+            {{ feedback.title }}
           </p>
           <p v-if="!feedback.correct" class="font-medium">Answer: {{ feedback.answer }}</p>
           <p class="text-gray-700">{{ feedback.explanation }}</p>
@@ -309,17 +331,16 @@ const buttonClass =
             >
               Retry lesson
             </button>
-            <button :class="buttonClass" @click="emit('close')">Done</button>
+            <!-- Not while saving: the topic would still show this lesson as the next one -->
+            <button :disabled="busy" :class="buttonClass" @click="emit('close')">Continue</button>
           </div>
         </template>
-        <button
-          v-else-if="question && !feedback"
-          :disabled="!response"
-          :class="[buttonClass, 'self-end']"
-          @click="check"
-        >
-          Check
-        </button>
+        <div v-else-if="question && !feedback" class="flex justify-end gap-2">
+          <button v-if="lesson.purpose === 'placement'" :class="secondaryClass" @click="dontKnow">
+            I don't know
+          </button>
+          <button :disabled="!response" :class="buttonClass" @click="check">Check</button>
+        </div>
         <button v-else :class="[buttonClass, 'self-end']" @click="next">
           {{ isLast ? 'Finish' : 'Continue' }}
         </button>

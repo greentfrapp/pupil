@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 from pupil_server.agents import AgentConfig
 from pupil_server.agents.fake import Call, FakeBackend, FakeSession, Say
 from pupil_server.app import create_app
-from pupil_server.conversations.transcript import UserMessage
 from pupil_server.db import LOCAL_LEARNER
 from pupil_server.db.runs import RunRepo
+from pupil_server.runs.log import UserMessage
 from pupil_server.settings import Settings
 
 QUESTION = {
@@ -25,7 +25,11 @@ PLACEMENT = {"title": "Placement", "purpose": "placement", "items": [QUESTION]}
 PLAN = {
     "topic": "SQL",
     "goal": "Query my team's data",
-    "units": [{"id": "basics", "title": "Basics", "summary": "", "objectives": [{"text": "t"}]}],
+    "rationale": "Practical first, starting from joins since you know the basics.",
+    "units": [
+        {"id": "basics", "title": "Basics", "summary": "", "objectives": [{"text": "t"}]},
+        {"id": "joins", "title": "Joins", "summary": "", "objectives": [{"text": "j"}]},
+    ],
 }
 
 
@@ -36,14 +40,14 @@ class Scripted:
     def __init__(self) -> None:
         self.syllabus: dict[str, Any] | None = None
 
-    def lesson(self, title: str) -> Call:
+    def lesson(self, title: str, unit: int = 0) -> Call:
         def arguments(outputs: list[Any]) -> dict[str, Any]:
             # Remember the syllabus when it was created earlier in the same run.
             for output in outputs:
                 if isinstance(output, dict) and "syllabus" in output:
                     self.syllabus = output["syllabus"]
             assert self.syllabus is not None
-            objective = self.syllabus["units"][0]["objectives"][0]["id"]
+            objective = self.syllabus["units"][unit]["objectives"][0]["id"]
             question = {**QUESTION, "objective_ids": [objective]}
             return {
                 "title": title,
@@ -129,6 +133,23 @@ def test_a_learner_new_to_the_topic_skips_placement(app_with):
     assert [x["title"] for x in topic["lessons"]] == ["First"]
 
 
+def test_the_path_puts_each_lesson_under_its_unit(app_with):
+    script = Scripted()
+    backend = FakeBackend(
+        [[Call("create_syllabus", PLAN), script.lesson("First")], [script.lesson("Joins", 1)]]
+    )
+    with TestClient(app_with(backend)) as c:
+        topic = settle(c, start(c, level="new")["id"])
+        take(c, topic["next_lesson_id"])
+        topic = settle(c, topic["id"])
+    first, joins = (x["lesson_id"] for x in topic["lessons"])
+    assert topic["syllabus"]["rationale"] == PLAN["rationale"]
+    assert [(u["unit_id"], u["lesson_ids"]) for u in topic["path"]] == [
+        ("basics", [first]),
+        ("joins", [joins]),
+    ]
+
+
 def test_a_run_that_makes_nothing_fails_and_can_be_tried_again(app_with):
     backend = FakeBackend([[Say("I'd rather not")], [Call("create_lesson", PLACEMENT)]])
     with TestClient(app_with(backend)) as c:
@@ -166,8 +187,8 @@ class Gated(FakeBackend):
         super().__init__([[Call("create_lesson", PLACEMENT)]])
         self.gate = asyncio.Event()
 
-    async def open_session(self, config: AgentConfig, resume: str | None = None) -> FakeSession:
-        session = await super().open_session(config, resume)
+    async def open_session(self, config: AgentConfig) -> FakeSession:
+        session = await super().open_session(config)
         send = session.send
 
         async def gated(text: str):

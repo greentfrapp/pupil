@@ -1,53 +1,53 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import ChatBox from './components/ChatBox.vue'
+import { ref } from 'vue'
+import HomeScreen from './components/HomeScreen.vue'
+import IntakeFlow from './components/IntakeFlow.vue'
+import LessonPlayer from './components/LessonPlayer.vue'
+import TopicScreen from './components/TopicScreen.vue'
 
-interface Health {
-  status: string
-  version: string
-  mode: string
-}
+type View =
+  | { name: 'home' }
+  | { name: 'intake' }
+  | { name: 'topic'; topicId: string }
+  | { name: 'lesson'; topicId: string; lessonId: string }
 
-const health = ref<Health | null>(null)
-const error = ref<string | null>(null)
-const loading = ref(false)
+const view = ref<View>({ name: 'home' })
 
-async function ping() {
-  loading.value = true
-  error.value = null
-  try {
-    const res = await fetch('/api/health')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    health.value = await res.json()
-  } catch (e) {
-    health.value = null
-    error.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loading.value = false
+function openLesson(lessonId: string) {
+  if (view.value.name === 'topic') {
+    view.value = { name: 'lesson', topicId: view.value.topicId, lessonId }
   }
 }
 
-onMounted(ping)
+/** Back to the topic, which shows what the agent is preparing next. */
+function closeLesson() {
+  if (view.value.name === 'lesson') view.value = { name: 'topic', topicId: view.value.topicId }
+}
 </script>
 
 <template>
-  <main class="mx-auto my-16 max-w-2xl space-y-4 px-4 font-sans text-gray-900">
-    <h1 class="text-3xl font-bold">Hello, Pupil</h1>
-    <div class="flex items-center gap-3">
-      <p v-if="loading" class="text-gray-500">Pinging sidecar…</p>
-      <p v-else-if="health">
-        Sidecar: <strong>{{ health.status }}</strong> (v{{ health.version }}, {{ health.mode }})
-      </p>
-      <p v-else class="text-red-600">Sidecar unreachable: {{ error }}</p>
-      <button
-        :disabled="loading"
-        class="rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
-        @click="ping"
-      >
-        Ping again
-      </button>
-    </div>
-    <h2 class="pt-4 text-xl font-semibold">Chat</h2>
-    <ChatBox />
-  </main>
+  <div class="min-h-screen bg-white font-sans text-gray-900">
+    <HomeScreen
+      v-if="view.name === 'home'"
+      @learn="view = { name: 'intake' }"
+      @open="(topicId) => (view = { name: 'topic', topicId })"
+    />
+    <IntakeFlow
+      v-else-if="view.name === 'intake'"
+      @close="view = { name: 'home' }"
+      @created="(topicId) => (view = { name: 'topic', topicId })"
+    />
+    <TopicScreen
+      v-else-if="view.name === 'topic'"
+      :topic-id="view.topicId"
+      @close="view = { name: 'home' }"
+      @play="openLesson"
+    />
+    <LessonPlayer
+      v-else
+      :key="view.lessonId"
+      :lesson-id="view.lessonId"
+      @close="closeLesson"
+    />
+  </div>
 </template>

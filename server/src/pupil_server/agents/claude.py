@@ -100,7 +100,7 @@ def _sdk_tool(tool: Tool) -> SdkMcpTool[Any]:
     )
 
 
-def build_options(config: AgentConfig, workdir: Path, resume: str | None) -> ClaudeAgentOptions:
+def build_options(config: AgentConfig, workdir: Path) -> ClaudeAgentOptions:
     web = list(WEB_TOOLS) if config.web_search else []
     return ClaudeAgentOptions(
         system_prompt=config.system_prompt,
@@ -116,24 +116,16 @@ def build_options(config: AgentConfig, workdir: Path, resume: str | None) -> Cla
         model=config.model,
         max_turns=config.max_turns,
         cwd=workdir,
-        resume=resume,
     )
 
 
 class ClaudeSession:
-    def __init__(self, client: ClaudeSDKClient, resume: str | None) -> None:
+    def __init__(self, client: ClaudeSDKClient) -> None:
         self._client = client
-        self._session_id = resume
-
-    @property
-    def resume_token(self) -> str | None:
-        return self._session_id
 
     async def send(self, text: str) -> AsyncIterator[AgentEvent]:
         await self._client.query(text)
         async for message in self._client.receive_response():
-            if isinstance(message, ResultMessage):
-                self._session_id = message.session_id
             for event in translate(message):
                 yield event
 
@@ -149,13 +141,12 @@ class ClaudeBackend:
     supports_web_search = True
 
     def __init__(self, workdir: Path | None = None) -> None:
-        # Fixed, not per-session: Claude files a conversation under its working directory,
-        # so resuming one needs the same directory.
+        # Where Claude runs, and keeps its session files.
         self._workdir = workdir or pupil_home() / "agent"
 
-    async def open_session(self, config: AgentConfig, resume: str | None = None) -> ClaudeSession:
+    async def open_session(self, config: AgentConfig) -> ClaudeSession:
         check_capabilities(self, config)
         self._workdir.mkdir(parents=True, exist_ok=True)
-        client = ClaudeSDKClient(build_options(config, self._workdir, resume))
+        client = ClaudeSDKClient(build_options(config, self._workdir))
         await client.connect()
-        return ClaudeSession(client, resume)
+        return ClaudeSession(client)

@@ -42,6 +42,16 @@ class LessonSummary(BaseModel):
     """How many questions the latest attempt got right; None if not taken yet."""
 
 
+class PathUnit(BaseModel):
+    """A unit of the syllabus, as a stop on the learner's path."""
+
+    unit_id: str
+    title: str
+    summary: str
+    lesson_ids: list[str]
+    """Its lessons, oldest first: each lesson is under the earliest unit it tests."""
+
+
 class RunStatus(BaseModel):
     job: str
     state: Literal["running", "done", "failed"]
@@ -56,6 +66,8 @@ class TopicOut(BaseModel):
     syllabus: Syllabus | None
     lessons: list[LessonSummary]
     """Oldest first."""
+    path: list[PathUnit]
+    """The syllabus's units in learning order, with their lessons; empty without one."""
     next_lesson_id: str | None
     """The oldest lesson not taken yet, if any."""
     last_run: RunStatus | None
@@ -68,9 +80,18 @@ def _runs(request: Request) -> Runs:
 async def _topic_out(request: Request, topic: Topic) -> TopicOut:
     db = request.app.state.db
     attempts = AttemptRepo(db)
+    syllabus = await SyllabusRepo(db).for_topic(LEARNER, topic.id)
+    units = syllabus.units_in_order() if syllabus else []
+    path = {
+        u.id: PathUnit(unit_id=u.id, title=u.title, summary=u.summary, lesson_ids=[]) for u in units
+    }
     lessons = []
     for lesson in await LessonRepo(db).for_topic(LEARNER, topic.id):
         taken = await attempts.for_lesson(LEARNER, lesson.id)
+        tested = [o for q in lesson.questions for o in q.objective_ids]
+        unit = syllabus.first_unit_with(tested) if syllabus else None
+        if unit is not None:
+            path[unit.id].lesson_ids.append(lesson.id)
         lessons.append(
             LessonSummary(
                 lesson_id=lesson.id,
@@ -98,8 +119,9 @@ async def _topic_out(request: Request, topic: Topic) -> TopicOut:
         request=topic.request,
         profile=topic.profile,
         created_at=topic.created_at,
-        syllabus=await SyllabusRepo(db).for_topic(LEARNER, topic.id),
+        syllabus=syllabus,
         lessons=lessons,
+        path=list(path.values()),
         next_lesson_id=next((s.lesson_id for s in lessons if s.attempts == 0), None),
         last_run=status,
     )

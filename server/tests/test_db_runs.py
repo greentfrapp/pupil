@@ -3,11 +3,11 @@ from pathlib import Path
 import pytest
 
 from pupil_server.agents import TextDelta, TurnComplete
-from pupil_server.conversations.transcript import UserMessage
 from pupil_server.db import LOCAL_LEARNER, Database, NotFound
 from pupil_server.db.runs import RunRepo
 from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.topic import Profile
+from pupil_server.runs.log import UserMessage
 
 ME = LOCAL_LEARNER
 PROFILE = Profile(why="work", depth="working", level="basics")

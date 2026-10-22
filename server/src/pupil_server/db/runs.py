@@ -11,11 +11,11 @@ from datetime import UTC, datetime
 
 from pydantic import AwareDatetime, BaseModel, TypeAdapter
 
-from pupil_server.conversations.transcript import TranscriptItem
 from pupil_server.db.database import Database, NotFound, new_id, timestamp
 from pupil_server.db.topics import topic_row
+from pupil_server.runs.log import LogItem
 
-_ITEM: TypeAdapter[TranscriptItem] = TypeAdapter(TranscriptItem)
+_ITEM: TypeAdapter[LogItem] = TypeAdapter(LogItem)
 
 
 class Run(BaseModel):
@@ -52,7 +52,7 @@ class RunRepo:
 
         return await self._db.run(work)
 
-    async def append(self, learner_id: str, run_id: str, item: TranscriptItem) -> None:
+    async def append(self, learner_id: str, run_id: str, item: LogItem) -> None:
         """Add an item to the end of the run's log."""
 
         def work(conn: sqlite3.Connection) -> None:
@@ -80,8 +80,8 @@ class RunRepo:
     async def get(self, learner_id: str, run_id: str) -> Run:
         return await self._db.run(lambda conn: _run(conn, learner_id, run_id))
 
-    async def log(self, learner_id: str, run_id: str) -> list[TranscriptItem]:
-        def work(conn: sqlite3.Connection) -> list[TranscriptItem]:
+    async def log(self, learner_id: str, run_id: str) -> list[LogItem]:
+        def work(conn: sqlite3.Connection) -> list[LogItem]:
             _run(conn, learner_id, run_id)
             rows = conn.execute(
                 "SELECT body FROM run_items WHERE run_id = ? ORDER BY seq", (run_id,)
