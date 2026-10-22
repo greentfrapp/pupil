@@ -23,6 +23,7 @@ from pupil_server.db.learning import (
 )
 from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.lesson import Item, Lesson, describe_attempt
+from pupil_server.learning.path import path
 from pupil_server.learning.syllabus import Objective, Syllabus, Unit, objective_changes
 
 OBJECTIVE_ID_RULE = (
@@ -55,12 +56,18 @@ class NewUnit(Unit):
 
     objectives: list[NewObjective] = Field(min_length=1)  # type: ignore[assignment]
     """Ids are assigned when the syllabus is created."""
+    lessons: int = Field(ge=1, le=10)
+    """How many lessons the unit takes, each 8 to 12 questions: its stops on the learner's
+    path. Size it by how far they want to go and how much the unit holds."""
 
 
 class RevisedUnit(Unit):
     model_config = _CONFIG
 
     objectives: list[RevisedObjective] = Field(min_length=1)  # type: ignore[assignment]
+    lessons: int = Field(ge=1, le=10)
+    """How many lessons the unit takes: its stops on the learner's path. Lessons already
+    written stay, even if this is fewer."""
 
 
 class SyllabusPlan(_Input):
@@ -104,6 +111,9 @@ class LessonPlan(_Input):
     syllabus_id: str | None = None
     """Required for a lesson. With it, every question must list the objective ids it tests;
     without it, questions list none."""
+    unit_id: str | None = None
+    """Required for a lesson: the unit it is one of the lessons of, as the brief says. Its
+    questions can also recheck objectives from earlier units."""
     keep_order: bool = False
     """Set when the questions build on each other. Otherwise they are shuffled each time the
     lesson is taken, though never past a teach card."""
@@ -144,7 +154,8 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     """The tools for a run on one of the learner's topics: what they create is filed under the
     topic, and the results they read are the topic's."""
     syllabi, lessons, evidence = SyllabusRepo(db), LessonRepo(db), EvidenceRepo(db)
-    attempts, topics = AttemptRepo(db), TopicRepo(db)
+    attempts = AttemptRepo(db)
+    _topics = TopicRepo(db)  # for add_note, while it is off
 
     @tool(
         "create_syllabus",
@@ -251,6 +262,16 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     )
     async def create_lesson(plan: LessonPlan) -> dict[str, Any]:
         lesson = Lesson(id=new_id("les"), **plan.model_dump())
+        if lesson.syllabus_id is not None and lesson.unit_id is not None:
+            syllabus = await syllabi.get(learner_id, lesson.syllabus_id)
+            written = await lessons.for_topic(learner_id, topic_id)
+            unit = next((p for p in path(syllabus, written) if p.unit.id == lesson.unit_id), None)
+            if unit is not None and len(unit.lessons) >= unit.stops:
+                raise ValueError(
+                    f"unit {unit.unit.id!r} already has all its {unit.stops} lessons. Write one "
+                    "for the unit the brief gives you, or give this unit more lessons with "
+                    "revise_syllabus."
+                )
         await lessons.create(learner_id, lesson, topic_id)
         return {"lesson_id": lesson.id}
 
@@ -258,15 +279,17 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     async def get_lesson(ref: LessonRef) -> dict[str, Any]:
         return (await lessons.get(learner_id, ref.lesson_id)).model_dump(mode="json")
 
-    @tool(
-        "add_note",
-        "Write down something about the learner worth remembering in later runs, e.g. "
-        "'prefers real-world examples' or 'keeps confusing joins and unions'. You won't "
-        "remember anything else from this run.",
-    )
-    async def add_note(note: NewNote) -> dict[str, Any]:
-        await topics.add_note(learner_id, topic_id, note.text)
-        return {"saved": True}
+    # Off until learners can give feedback (step 5). Until then runs used notes as a work log,
+    # repeating what the brief already holds.
+    # @tool(
+    #     "add_note",
+    #     "Write down something about the learner worth remembering in later runs, e.g. "
+    #     "'prefers real-world examples' or 'keeps confusing joins and unions'. You won't "
+    #     "remember anything else from this run.",
+    # )
+    # async def add_note(note: NewNote) -> dict[str, Any]:
+    #     await _topics.add_note(learner_id, topic_id, note.text)
+    #     return {"saved": True}
 
     @tool(
         "recent_results",
@@ -293,5 +316,5 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
         create_lesson,
         get_lesson,
         recent_results,
-        add_note,
+        # add_note,
     ]

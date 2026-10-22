@@ -6,22 +6,31 @@ from typing import Literal
 
 from pupil_server.learning.topic import Level
 
-Job = Literal["placement", "plan", "next_lesson"]
+Job = Literal["placement", "plan", "next_lesson", "extend"]
+
+AHEAD = 2
+"""How many lessons are kept written but untaken: the next one, and one more written while
+the learner takes it. A run takes less time than a lesson, so the learner never waits, and
+each lesson is written knowing the results of all but the one being taken."""
 
 
-def next_job(level: Level, has_syllabus: bool, lessons: int, has_untaken: bool) -> Job | None:
-    """The job a topic needs done, or None while a lesson is waiting to be taken.
+def next_job(
+    level: Level, has_syllabus: bool, lessons: int, untaken: int, stops_left: bool
+) -> Job | None:
+    """The job a topic needs done, or None when nothing is needed yet.
 
     A topic starts with a placement lesson, unless the learner is new to it; once that's
-    taken, the plan (a syllabus and the first lesson); then one lesson after another.
+    taken, the plan (a syllabus and its first lesson); then a lesson for each stop on the
+    path, kept `AHEAD` of the learner. Going further than the path is the learner's choice
+    (`extend`), so never needed here.
     """
-    if has_untaken:
+    if not has_syllabus:
+        if untaken:
+            return None
+        return "placement" if lessons == 0 and level != "new" else "plan"
+    if untaken >= AHEAD or not stops_left:
         return None
-    if has_syllabus:
-        return "next_lesson"
-    if lessons == 0 and level != "new":
-        return "placement"
-    return "plan"
+    return "next_lesson"
 
 
 SYSTEM_PROMPT = """\
@@ -56,15 +65,24 @@ INSTRUCTIONS: dict[Job, str] = {
     "plan": (
         "Create the syllabus for this topic with create_syllabus, sized and ordered by the "
         "setup answers, and starting where the placement results show the learner's knowledge "
-        "runs out (from the beginning if there was no placement). The learner sees it next, "
-        "with its rationale: say in one plain line how their answers and placement shaped it. "
-        "Then write their first lesson with create_lesson, tied to the syllabus."
+        "runs out (from the beginning if there was no placement). Give each unit the number "
+        "of lessons it needs: together they are the learner's whole path, and the topic ends "
+        "when they've taken them all. The learner sees the plan next, with its rationale: say "
+        "in one plain line how their answers and placement shaped it. Then write the first "
+        "lesson of the first unit with create_lesson."
     ),
     "next_lesson": (
-        "Write the learner's next lesson with create_lesson, tied to the topic's syllabus. "
-        "Use the results since your last run to choose what it covers: go back over what they "
-        "got wrong, or move on where they've shown they know it. If the syllabus no longer "
-        "fits them, revise it first with revise_syllabus. Write down anything worth "
-        "remembering about the learner with add_note."
+        "Write the lesson for the stop on the path given below, with create_lesson. Use the "
+        "results since your last run to choose what it covers: go back over what they got "
+        "wrong, or move on where they've shown they know it. The learner may still be taking "
+        "the lesson before it, so those results can be missing. A unit's last lesson also "
+        "rounds it off: cover anything in the unit they haven't yet got right. If the "
+        "syllabus no longer fits them, revise it first with revise_syllabus."
+    ),
+    "extend": (
+        "The learner has taken every lesson on their path and wants to go further. Add new "
+        "units with revise_syllabus that go deeper or wider than the syllabus so far, each "
+        "with its number of lessons, and update the rationale to say what the new units add. "
+        "Keep the existing units as they are. Don't write lessons: they are written next."
     ),
 }

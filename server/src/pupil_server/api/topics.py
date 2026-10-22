@@ -1,8 +1,9 @@
 """Topics: asking to learn something, and following what the agent prepares for it.
 
-Creating a topic starts the agent's first run in the background, and so does finishing a
-topic's lesson when no other is waiting. The client polls a topic to see when the next lesson
-is ready.
+Creating a topic starts the agent's first run in the background, and finishing a lesson
+starts the next if the topic needs one; lessons are written ahead along the path. The client
+polls a topic to see when the next lesson is ready. Once every lesson on the path is taken,
+the topic is finished, and the learner can ask to go further.
 """
 
 from __future__ import annotations
@@ -13,12 +14,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import AwareDatetime, BaseModel, Field
 
 from pupil_server.db import LOCAL_LEARNER, NotFound
-from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
+from pupil_server.db.learning import AttemptRepo
 from pupil_server.db.runs import RunRepo
 from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.syllabus import Syllabus
 from pupil_server.learning.topic import Profile, Topic
-from pupil_server.runs.service import Runs
+from pupil_server.runs.service import NotFinished, RunGoing, Runs
+from pupil_server.runs.state import topic_state
 
 router = APIRouter(prefix="/api/topics", tags=["topics"])
 
@@ -43,13 +45,15 @@ class LessonSummary(BaseModel):
 
 
 class PathUnit(BaseModel):
-    """A unit of the syllabus, as a stop on the learner's path."""
+    """A unit of the syllabus, with its lessons as stops on the learner's path."""
 
     unit_id: str
     title: str
     summary: str
+    stops: int
+    """How many lessons the unit takes."""
     lesson_ids: list[str]
-    """Its lessons, oldest first: each lesson is under the earliest unit it tests."""
+    """The lessons written for it so far, oldest first; the rest of its stops are to come."""
 
 
 class RunStatus(BaseModel):
@@ -70,6 +74,8 @@ class TopicOut(BaseModel):
     """The syllabus's units in learning order, with their lessons; empty without one."""
     next_lesson_id: str | None
     """The oldest lesson not taken yet, if any."""
+    finished: bool
+    """Every lesson on the path has been taken."""
     last_run: RunStatus | None
 
 
@@ -80,18 +86,10 @@ def _runs(request: Request) -> Runs:
 async def _topic_out(request: Request, topic: Topic) -> TopicOut:
     db = request.app.state.db
     attempts = AttemptRepo(db)
-    syllabus = await SyllabusRepo(db).for_topic(LEARNER, topic.id)
-    units = syllabus.units_in_order() if syllabus else []
-    path = {
-        u.id: PathUnit(unit_id=u.id, title=u.title, summary=u.summary, lesson_ids=[]) for u in units
-    }
+    state = await topic_state(db, LEARNER, topic.id)
     lessons = []
-    for lesson in await LessonRepo(db).for_topic(LEARNER, topic.id):
+    for lesson in state.lessons:
         taken = await attempts.for_lesson(LEARNER, lesson.id)
-        tested = [o for q in lesson.questions for o in q.objective_ids]
-        unit = syllabus.first_unit_with(tested) if syllabus else None
-        if unit is not None:
-            path[unit.id].lesson_ids.append(lesson.id)
         lessons.append(
             LessonSummary(
                 lesson_id=lesson.id,
@@ -112,17 +110,27 @@ async def _topic_out(request: Request, topic: Topic) -> TopicOut:
         # Not going, but never finished: cut off, e.g. by a restart.
         status = RunStatus(job=run.job, state="failed", error="the run was cut off")
     else:
-        state = "done" if run.error is None else "failed"
-        status = RunStatus(job=run.job, state=state, error=run.error)
+        outcome = "done" if run.error is None else "failed"
+        status = RunStatus(job=run.job, state=outcome, error=run.error)
     return TopicOut(
         id=topic.id,
         request=topic.request,
         profile=topic.profile,
         created_at=topic.created_at,
-        syllabus=syllabus,
+        syllabus=state.syllabus,
         lessons=lessons,
-        path=list(path.values()),
-        next_lesson_id=next((s.lesson_id for s in lessons if s.attempts == 0), None),
+        path=[
+            PathUnit(
+                unit_id=p.unit.id,
+                title=p.unit.title,
+                summary=p.unit.summary,
+                stops=p.stops,
+                lesson_ids=[lesson.id for lesson in p.lessons],
+            )
+            for p in state.path
+        ],
+        next_lesson_id=state.untaken[0].id if state.untaken else None,
+        finished=state.finished,
         last_run=status,
     )
 
@@ -156,8 +164,21 @@ async def get_topic(topic_id: str, request: Request) -> TopicOut:
 
 @router.post("/{topic_id}/prepare", status_code=202)
 async def prepare(topic_id: str, request: Request) -> TopicOut:
-    """Start the run the topic needs, if none is going and no lesson is waiting, e.g. to try
-    again after a run failed."""
+    """Start the run the topic needs, if none is going and it needs one, e.g. to try again
+    after a run failed."""
     topic = await _get(request, topic_id)
     await _runs(request).prepare(LEARNER, topic.id)
+    return await _topic_out(request, topic)
+
+
+@router.post("/{topic_id}/extend", status_code=202)
+async def extend(topic_id: str, request: Request) -> TopicOut:
+    """Go further than a finished topic's path: a run adds units, and their lessons follow."""
+    topic = await _get(request, topic_id)
+    try:
+        await _runs(request).extend(LEARNER, topic.id)
+    except RunGoing:
+        raise HTTPException(409, "the topic already has a run going") from None
+    except NotFinished:
+        raise HTTPException(409, "the topic isn't finished yet") from None
     return await _topic_out(request, topic)

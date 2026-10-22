@@ -1,8 +1,9 @@
 """Running the agent's jobs for topics, in the background.
 
-Whenever a topic has no lesson waiting to be taken, a run prepares what it needs next. A run
-is a fresh agent session: it gets a brief built from the database, does its one job with its
-tools, and ends. Nothing carries over between runs except what the database holds.
+A topic's lessons are written ahead of the learner, a stop on the path at a time: a run
+writes one, and once it has, the next run starts if the topic needs another. A run is a fresh
+agent session: it gets a brief built from the database, does its one job with its tools, and
+ends. Nothing carries over between runs except what the database holds.
 
 At most one run per topic goes at a time. Pupil is a single server process, so an in-memory
 marker per topic is enough.
@@ -23,15 +24,22 @@ from pupil_server.agents.base import (
     TurnComplete,
 )
 from pupil_server.db import Database
-from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
 from pupil_server.db.runs import RunRepo
-from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.tools import learning_tools
 from pupil_server.runs.brief import build_brief
-from pupil_server.runs.jobs import SYSTEM_PROMPT, Job, next_job
+from pupil_server.runs.jobs import SYSTEM_PROMPT, Job
 from pupil_server.runs.log import UserMessage
+from pupil_server.runs.state import TopicState, topic_state
 
 log = logging.getLogger(__name__)
+
+
+class RunGoing(RuntimeError):
+    """The topic already has a run going."""
+
+
+class NotFinished(RuntimeError):
+    """The topic's path isn't finished, so there's nothing to go further from."""
 
 
 class Runs:
@@ -40,8 +48,10 @@ class Runs:
         self._backend = backend
         self._max_turns = max_turns
         self._runs = RunRepo(db)
-        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._tasks: dict[str, asyncio.Task[bool]] = {}
         self._jobs: dict[str, Job] = {}
+        self._follow_ups: set[asyncio.Task[bool]] = set()
+        self._closed = False
 
     def is_running(self, topic_id: str) -> bool:
         return topic_id in self._tasks
@@ -52,54 +62,75 @@ class Runs:
         return self._jobs.get(topic_id)
 
     async def prepare(self, learner_id: str, topic_id: str) -> bool:
-        """Start the run the topic needs next, unless one is going or a lesson is waiting.
+        """Start the run the topic needs next, unless one is going or none is needed.
 
         Returns whether a run is going afterwards. Never starts a second run for a topic.
         """
+        if self._closed:
+            return False
         if self.is_running(topic_id):
             return True
-        job = await self.next_job(learner_id, topic_id)
+        state = await topic_state(self._db, learner_id, topic_id)
         if self.is_running(topic_id):  # started while we looked
             return True
+        job = state.next_job
         if job is None:
             return False
-        task = asyncio.create_task(self._run(learner_id, topic_id, job))
-        self._tasks[topic_id] = task
-        self._jobs[topic_id] = job
-
-        def done(_: asyncio.Task[None]) -> None:
-            del self._tasks[topic_id], self._jobs[topic_id]
-
-        task.add_done_callback(done)
+        self._start(learner_id, state, job)
         return True
 
-    async def wait(self, topic_id: str) -> None:
-        """Until the topic's run, if one is going, has ended."""
-        task = self._tasks.get(topic_id)
-        if task is not None:
-            await asyncio.wait([task])
+    async def extend(self, learner_id: str, topic_id: str) -> None:
+        """Start a run that adds to a finished topic's path, as the learner asked."""
+        if self.is_running(topic_id):
+            raise RunGoing(topic_id)
+        state = await topic_state(self._db, learner_id, topic_id)
+        if self.is_running(topic_id):
+            raise RunGoing(topic_id)
+        if not state.finished:
+            raise NotFinished(topic_id)
+        self._start(learner_id, state, "extend")
 
-    async def next_job(self, learner_id: str, topic_id: str) -> Job | None:
-        topic = await TopicRepo(self._db).get(learner_id, topic_id)
-        syllabus = await SyllabusRepo(self._db).for_topic(learner_id, topic_id)
-        lessons = await LessonRepo(self._db).for_topic(learner_id, topic_id)
-        attempts = AttemptRepo(self._db)
-        untaken = [
-            lesson for lesson in lessons if not await attempts.for_lesson(learner_id, lesson.id)
-        ]
-        return next_job(topic.profile.level, syllabus is not None, len(lessons), bool(untaken))
+    async def wait(self, topic_id: str) -> None:
+        """Until the topic's runs have ended, including the ones each starts after it."""
+        while True:
+            if task := self._tasks.get(topic_id):
+                await asyncio.wait([task])
+            elif self._follow_ups:
+                await asyncio.wait(list(self._follow_ups))
+            else:
+                return
 
     async def close(self) -> None:
         """Stop any runs still going; each records that it was cut off."""
+        self._closed = True
+        await asyncio.gather(*self._follow_ups, return_exceptions=True)
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _run(self, learner_id: str, topic_id: str, job: Job) -> None:
-        topic = await TopicRepo(self._db).get(learner_id, topic_id)
-        last = await self._runs.latest_success(learner_id, topic_id)
-        run = await self._runs.start(learner_id, topic_id, job)
+    def _start(self, learner_id: str, state: TopicState, job: Job) -> None:
+        topic_id = state.topic.id
+        task = asyncio.create_task(self._run(learner_id, state, job))
+        self._tasks[topic_id] = task
+        self._jobs[topic_id] = job
+
+        def done(_: asyncio.Task[bool]) -> None:
+            del self._tasks[topic_id], self._jobs[topic_id]
+            # Once a run has done its job, the topic may need another, e.g. to keep a lesson
+            # ahead. Not after a failure, which would only fail again.
+            if not self._closed and not task.cancelled() and task.result():
+                follow_up = asyncio.create_task(self.prepare(learner_id, topic_id))
+                self._follow_ups.add(follow_up)
+                follow_up.add_done_callback(self._follow_ups.discard)
+
+        task.add_done_callback(done)
+
+    async def _run(self, learner_id: str, before: TopicState, job: Job) -> bool:
+        """Do the job; whether the run did it."""
+        topic = before.topic
+        last = await self._runs.latest_success(learner_id, topic.id)
+        run = await self._runs.start(learner_id, topic.id, job)
         error: str | None = None
         cost: float | None = None
         ended = False
@@ -113,12 +144,17 @@ class Runs:
 
         try:
             brief = await build_brief(
-                self._db, learner_id, topic, job, last.started_at if last else None
+                self._db,
+                learner_id,
+                topic,
+                job,
+                last.started_at if last else None,
+                before.next_stop,
             )
             await self._runs.append(learner_id, run.id, UserMessage(text=brief))
             config = AgentConfig(
                 system_prompt=SYSTEM_PROMPT,
-                tools=learning_tools(self._db, learner_id, topic_id),
+                tools=learning_tools(self._db, learner_id, topic.id),
                 max_turns=self._max_turns,
             )
             session = await self._backend.open_session(config)
@@ -136,10 +172,11 @@ class Runs:
             finally:
                 await session.close()
             if error is None:
-                error = await self._missing(learner_id, topic_id, job)
+                after = await topic_state(self._db, learner_id, topic.id)
+                error = _missing(job, before, after)
             ended = True
         except Exception as exc:
-            log.exception("run %s (%s) for topic %s failed", run.id, job, topic_id)
+            log.exception("run %s (%s) for topic %s failed", run.id, job, topic.id)
             error = f"{type(exc).__name__}: {exc}"
             ended = True
         finally:
@@ -149,11 +186,15 @@ class Runs:
                 if not ended:
                     error = "the run was cut off"
                 await self._runs.finish(learner_id, run.id, error, cost)
+        return error is None
 
-    async def _missing(self, learner_id: str, topic_id: str, job: Job) -> str | None:
-        """What the run should have made but didn't, if anything."""
-        if job == "plan" and await SyllabusRepo(self._db).for_topic(learner_id, topic_id) is None:
-            return "the run didn't create a syllabus"
-        if await self.next_job(learner_id, topic_id) is not None:
-            return "the run didn't leave a lesson to take"
-        return None
+
+def _missing(job: Job, before: TopicState, after: TopicState) -> str | None:
+    """What the run should have made but didn't, if anything."""
+    if job == "extend":
+        return None if after.next_stop is not None else "the run didn't add to the path"
+    if job == "plan" and after.syllabus is None:
+        return "the run didn't create a syllabus"
+    if len(after.lessons) <= len(before.lessons):
+        return "the run didn't write a lesson"
+    return None

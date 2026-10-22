@@ -339,6 +339,8 @@ class Lesson(BaseModel):
     purpose: Literal["placement", "lesson"]
     syllabus_id: str | None = None
     """None for a placement lesson written before any syllabus exists."""
+    unit_id: str | None = None
+    """The unit whose lessons this is one of, as a stop on the path; None for placement."""
     keep_order: bool = False
     """Set when the questions build on each other. Otherwise they are shuffled each time the
     lesson is taken, though never past a teach card."""
@@ -360,6 +362,10 @@ class Lesson(BaseModel):
             cards = [i.id for i in self.items if isinstance(i, TeachCard)]
             if cards:
                 raise ValueError(f"a placement lesson measures, so has no teach cards: {cards}")
+        if self.purpose == "lesson" and self.unit_id is None:
+            raise ValueError("a lesson needs the unit_id of the unit it is one of the lessons of")
+        if self.purpose == "placement" and self.unit_id is not None:
+            raise ValueError("placement isn't a stop on the path, so has no unit_id")
         if self.syllabus_id is None:
             if self.purpose == "lesson":
                 raise ValueError("a lesson needs a syllabus_id; only placement comes before one")
@@ -369,9 +375,12 @@ class Lesson(BaseModel):
         return self
 
     def check_tags(self, syllabus: Syllabus) -> None:
-        """Every question must test at least one objective, and only ones the syllabus has."""
+        """The lesson's unit must be in the syllabus, and every question must test at least one
+        objective, and only ones the syllabus has."""
         if self.syllabus_id != syllabus.id:
             raise ValueError(f"lesson is for syllabus {self.syllabus_id!r}, not {syllabus.id!r}")
+        if self.unit_id is not None and self.unit_id not in {u.id for u in syllabus.units}:
+            raise ValueError(f"no unit {self.unit_id!r} in syllabus {syllabus.id!r}")
         untagged = [q.id for q in self.questions if not q.objective_ids]
         if untagged:
             raise ValueError(f"questions without objective ids: {untagged}")

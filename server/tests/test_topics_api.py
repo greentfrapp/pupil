@@ -22,41 +22,79 @@ QUESTION = {
     "answer": True,
 }
 PLACEMENT = {"title": "Placement", "purpose": "placement", "items": [QUESTION]}
-PLAN = {
-    "topic": "SQL",
-    "goal": "Query my team's data",
-    "rationale": "Practical first, starting from joins since you know the basics.",
-    "units": [
-        {"id": "basics", "title": "Basics", "summary": "", "objectives": [{"text": "t"}]},
-        {"id": "joins", "title": "Joins", "summary": "", "objectives": [{"text": "j"}]},
-    ],
-}
+
+
+def unit(uid: str, lessons: int) -> dict:
+    title = uid.title()
+    return {
+        "id": uid,
+        "title": title,
+        "summary": "",
+        "objectives": [{"text": title}],
+        "lessons": lessons,
+    }
+
+
+def plan(basics: int = 2, joins: int = 1) -> dict:
+    return {
+        "topic": "SQL",
+        "goal": "Query my team's data",
+        "rationale": "Practical first, starting from joins since you know the basics.",
+        "units": [unit("basics", basics), unit("joins", joins)],
+    }
 
 
 class Scripted:
-    """Lessons for the fake agent to write, tied to the syllabus it created, whose ids the app
+    """Calls for the fake agent to make on the syllabus it created, whose ids the app
     assigned."""
 
     def __init__(self) -> None:
         self.syllabus: dict[str, Any] | None = None
 
-    def lesson(self, title: str, unit: int = 0) -> Call:
+    def _remember(self, outputs: list[Any]) -> dict[str, Any]:
+        # The syllabus as last created or revised, in this run or an earlier one.
+        for output in outputs:
+            if isinstance(output, dict) and "syllabus" in output:
+                self.syllabus = output["syllabus"]
+        assert self.syllabus is not None
+        return self.syllabus
+
+    def lesson(self, title: str, unit_id: str) -> Call:
         def arguments(outputs: list[Any]) -> dict[str, Any]:
-            # Remember the syllabus when it was created earlier in the same run.
-            for output in outputs:
-                if isinstance(output, dict) and "syllabus" in output:
-                    self.syllabus = output["syllabus"]
-            assert self.syllabus is not None
-            objective = self.syllabus["units"][unit]["objectives"][0]["id"]
-            question = {**QUESTION, "objective_ids": [objective]}
+            syllabus = self._remember(outputs)
+            unit = next(u for u in syllabus["units"] if u["id"] == unit_id)
+            question = {**QUESTION, "objective_ids": [unit["objectives"][0]["id"]]}
             return {
                 "title": title,
                 "purpose": "lesson",
-                "syllabus_id": self.syllabus["id"],
+                "syllabus_id": syllabus["id"],
+                "unit_id": unit_id,
                 "items": [question],
             }
 
         return Call("create_lesson", arguments)
+
+    def add_unit(self, unit_id: str, lessons: int) -> Call:
+        def arguments(outputs: list[Any]) -> dict[str, Any]:
+            syllabus = self._remember(outputs)
+            return {
+                "syllabus_id": syllabus["id"],
+                "based_on_revision": syllabus["revision"],
+                "topic": syllabus["topic"],
+                "goal": syllabus["goal"],
+                "rationale": "Now window functions too.",
+                "units": [*syllabus["units"], unit(unit_id, lessons)],
+            }
+
+        return Call("revise_syllabus", arguments)
+
+    def reread(self) -> Call:
+        """Read the syllabus again, so a later run's lessons see this run's revision."""
+
+        def arguments(outputs: list[Any]) -> dict[str, Any]:
+            return {"syllabus_id": self._remember(outputs)["id"]}
+
+        return Call("get_syllabus", arguments)
 
 
 def start(client: TestClient, level: str = "basics") -> dict:
@@ -86,68 +124,92 @@ def app_with(tmp_path: Path):
     return make
 
 
-def test_a_topic_goes_from_placement_to_a_plan_to_lessons(app_with):
+def titles(topic: dict) -> list[str]:
+    return [x["title"] for x in topic["lessons"]]
+
+
+def test_a_topic_goes_from_placement_to_a_plan_to_lessons_written_ahead(app_with):
     script = Scripted()
     backend = FakeBackend(
         [
             [Call("create_lesson", PLACEMENT)],
-            [
-                Call("create_syllabus", PLAN),
-                Call("add_note", {"text": "starts from scratch"}),
-                script.lesson("First"),
-            ],
-            [script.lesson("Second")],
+            [Call("create_syllabus", plan()), script.lesson("Basics 1", "basics")],
+            [script.lesson("Basics 2", "basics")],  # straight after, while Basics 1 is taken
+            [script.lesson("Joins", "joins")],
         ]
     )
     with TestClient(app_with(backend)) as c:
         topic = settle(c, start(c)["id"])
-        assert [x["purpose"] for x in topic["lessons"]] == ["placement"]
+        assert titles(topic) == ["Placement"]
         assert topic["next_lesson_id"] == topic["lessons"][0]["lesson_id"]
         assert topic["last_run"] == {"job": "placement", "state": "done", "error": None}
 
         take(c, topic["next_lesson_id"])
         topic = settle(c, topic["id"])
-        assert topic["syllabus"]["goal"] == "Query my team's data"
-        assert [x["title"] for x in topic["lessons"]] == ["Placement", "First"]
+        assert topic["syllabus"]["rationale"] == plan()["rationale"]
+        assert titles(topic) == ["Placement", "Basics 1", "Basics 2"]  # one lesson ahead
         assert topic["next_lesson_id"] == topic["lessons"][1]["lesson_id"]
-        assert topic["last_run"]["job"] == "plan"
-
-        take(c, topic["next_lesson_id"])
-        topic = settle(c, topic["id"])
-        assert [x["title"] for x in topic["lessons"]] == ["Placement", "First", "Second"]
         assert topic["last_run"] == {"job": "next_lesson", "state": "done", "error": None}
 
-    briefs = [s.received[0] for s in backend.sessions]
-    assert "'First'" not in briefs[1] and "'Placement' (" in briefs[1]  # placement results
-    assert "# Your notes\n- starts from scratch" in briefs[2]
-    results_since = briefs[2].split("# Results since your last run\n")[1]
-    assert results_since.startswith("'First'")  # only what happened since the plan run
-
-
-def test_a_learner_new_to_the_topic_skips_placement(app_with):
-    script = Scripted()
-    backend = FakeBackend([[Call("create_syllabus", PLAN), script.lesson("First")]])
-    with TestClient(app_with(backend)) as c:
-        topic = settle(c, start(c, level="new")["id"])
-    assert topic["last_run"]["job"] == "plan"
-    assert [x["title"] for x in topic["lessons"]] == ["First"]
-
-
-def test_the_path_puts_each_lesson_under_its_unit(app_with):
-    script = Scripted()
-    backend = FakeBackend(
-        [[Call("create_syllabus", PLAN), script.lesson("First")], [script.lesson("Joins", 1)]]
-    )
-    with TestClient(app_with(backend)) as c:
-        topic = settle(c, start(c, level="new")["id"])
         take(c, topic["next_lesson_id"])
         topic = settle(c, topic["id"])
-    first, joins = (x["lesson_id"] for x in topic["lessons"])
-    assert topic["syllabus"]["rationale"] == PLAN["rationale"]
-    assert [(u["unit_id"], u["lesson_ids"]) for u in topic["path"]] == [
-        ("basics", [first]),
-        ("joins", [joins]),
-    ]
+        assert titles(topic) == ["Placement", "Basics 1", "Basics 2", "Joins"]
+
+    briefs = [s.received[0] for s in backend.sessions]
+    assert "'Placement' (" in briefs[1].split("# Results since your last run\n")[1]
+    assert "lesson 2 of 2 (the unit's last) in unit 'basics'" in briefs[2]
+    results_since = briefs[3].split("# Results since your last run\n")[1]
+    assert results_since.startswith("'Basics 1'")  # only what happened since the last run
+
+
+def test_the_path_has_every_stop_and_ends_when_all_are_taken(app_with):
+    script = Scripted()
+    backend = FakeBackend(
+        [
+            [Call("create_syllabus", plan(basics=1, joins=1)), script.lesson("Basics", "basics")],
+            [script.lesson("Joins", "joins")],
+        ]
+    )
+    with TestClient(app_with(backend)) as c:
+        topic = settle(c, start(c, level="new")["id"])  # nothing to place
+        basics, joins = (x["lesson_id"] for x in topic["lessons"])
+        assert [(u["unit_id"], u["stops"], u["lesson_ids"]) for u in topic["path"]] == [
+            ("basics", 1, [basics]),
+            ("joins", 1, [joins]),
+        ]
+
+        take(c, basics)
+        topic = settle(c, topic["id"])
+        assert not topic["finished"]
+        take(c, joins)
+        topic = settle(c, topic["id"])
+    assert topic["finished"]
+    assert topic["next_lesson_id"] is None
+    assert len(backend.sessions) == 2  # nothing more is written once the path is
+
+
+def test_a_finished_topic_can_go_further(app_with):
+    script = Scripted()
+    backend = FakeBackend(
+        [
+            [Call("create_syllabus", plan(basics=1, joins=1)), script.lesson("Basics", "basics")],
+            [script.lesson("Joins", "joins")],
+            [script.add_unit("windows", 1), script.reread()],
+            [script.lesson("Windows", "windows")],
+        ]
+    )
+    with TestClient(app_with(backend)) as c:
+        topic_id = start(c, level="new")["id"]
+        assert c.post(f"/api/topics/{topic_id}/extend").status_code == 409  # not finished
+        for lesson in settle(c, topic_id)["lessons"]:
+            take(c, lesson["lesson_id"])
+        assert settle(c, topic_id)["finished"]
+
+        assert c.post(f"/api/topics/{topic_id}/extend").status_code == 202
+        topic = settle(c, topic_id)
+    assert not topic["finished"]
+    assert [u["unit_id"] for u in topic["path"]] == ["basics", "joins", "windows"]
+    assert titles(topic) == ["Basics", "Joins", "Windows"]
 
 
 def test_a_run_that_makes_nothing_fails_and_can_be_tried_again(app_with):
@@ -157,7 +219,7 @@ def test_a_run_that_makes_nothing_fails_and_can_be_tried_again(app_with):
         assert topic["last_run"] == {
             "job": "placement",
             "state": "failed",
-            "error": "the run didn't leave a lesson to take",
+            "error": "the run didn't write a lesson",
         }
         assert topic["next_lesson_id"] is None
 

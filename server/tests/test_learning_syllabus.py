@@ -60,9 +60,3 @@ def test_units_in_order_puts_prerequisites_first_and_keeps_authored_order():
         unit("classes", "functions"),
     )
     assert [u.id for u in s.units_in_order()] == ["basics", "functions", "files", "classes"]
-
-
-def test_first_unit_with_goes_by_learning_order():
-    s = syllabus(unit("functions", "basics"), unit("basics"), unit("files"))
-    assert s.first_unit_with(["obj_files", "obj_functions"]).id == "functions"
-    assert s.first_unit_with(["obj_retired"]) is None
