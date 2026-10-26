@@ -17,7 +17,7 @@ The agent writes your next lesson in the background while you take the current o
 ## Run it
 
 You need:
-- [Node.js](https://nodejs.org) 20+ and [pnpm](https://pnpm.io) 10
+- [Node.js](https://nodejs.org) 20.19+ and [pnpm](https://pnpm.io) 10
 - [uv](https://docs.astral.sh/uv/) (it fetches the right Python for you)
 - Claude Code or Codex, with a valid subscription
 
