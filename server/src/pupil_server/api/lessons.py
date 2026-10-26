@@ -20,7 +20,7 @@ from pupil_server.learning.lesson import Answer, Attempt, GradedAttempt, Lesson,
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
-# One learner until remote mode adds accounts.
+# One learner, until there are accounts.
 LEARNER = LOCAL_LEARNER
 
 

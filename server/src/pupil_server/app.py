@@ -80,7 +80,7 @@ def create_app(
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__, "mode": config.mode}
+        return {"status": "ok", "version": __version__}
 
     app.include_router(lessons.router)
     app.include_router(topics.router)
