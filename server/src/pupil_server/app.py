@@ -76,7 +76,6 @@ def create_app(
             lock.release()
 
     app = FastAPI(title="Pupil", version=__version__, lifespan=lifespan)
-    app.state.settings = config
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
