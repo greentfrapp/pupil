@@ -7,8 +7,10 @@ from pupil_server.agents.fake import FakeBackend
 from pupil_server.app import create_app
 from pupil_server.db import LOCAL_LEARNER
 from pupil_server.db.learning import LessonRepo, SyllabusRepo
+from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.lesson import Lesson, Numeric, TeachCard, TrueFalse
 from pupil_server.learning.syllabus import Syllabus
+from pupil_server.learning.topic import Profile
 from pupil_server.settings import Settings
 
 SYLLABUS = Syllabus(
@@ -49,6 +51,8 @@ LESSON = Lesson(
     items=[TeachCard(id="c1", title="Lists", text="A list holds items."), *questions(["o1"])],
 )
 
+PROFILE = Profile(why="work", depth="working", level="new")
+
 PLACEMENT = Lesson(id="les_p", title="Placement", purpose="placement", items=questions([]))
 
 
@@ -56,9 +60,11 @@ PLACEMENT = Lesson(id="les_p", title="Placement", purpose="placement", items=que
 def client(tmp_path: Path):
     app = create_app(Settings(), db_path=tmp_path / "t.db", agent_backend=FakeBackend())
     with TestClient(app) as c:
-        c.portal.call(SyllabusRepo(app.state.db).create, LOCAL_LEARNER, SYLLABUS)
+        db = app.state.db
+        topic = c.portal.call(TopicRepo(db).create, LOCAL_LEARNER, "Python", PROFILE)
+        c.portal.call(SyllabusRepo(db).create, LOCAL_LEARNER, SYLLABUS, topic.id)
         for lesson in (LESSON, PLACEMENT):
-            c.portal.call(LessonRepo(app.state.db).create, LOCAL_LEARNER, lesson)
+            c.portal.call(LessonRepo(db).create, LOCAL_LEARNER, lesson, topic.id)
         yield c
 
 

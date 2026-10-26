@@ -22,7 +22,7 @@ CREATE TABLE syllabi (
     id TEXT NOT NULL,
     revision INTEGER NOT NULL CHECK (revision >= 1),
     learner_id TEXT NOT NULL REFERENCES learners (id),
-    topic_id TEXT REFERENCES topics (id),
+    topic_id TEXT NOT NULL REFERENCES topics (id),
     body TEXT NOT NULL, -- Syllabus JSON
     created_at TEXT NOT NULL,
     PRIMARY KEY (id, revision)
@@ -34,7 +34,7 @@ CREATE INDEX syllabi_by_topic ON syllabi (topic_id, created_at);
 CREATE TABLE lessons (
     id TEXT PRIMARY KEY,
     learner_id TEXT NOT NULL REFERENCES learners (id),
-    topic_id TEXT REFERENCES topics (id),
+    topic_id TEXT NOT NULL REFERENCES topics (id),
     syllabus_id TEXT, -- NULL for a placement lesson written before any syllabus
     body TEXT NOT NULL, -- Lesson JSON
     created_at TEXT NOT NULL
