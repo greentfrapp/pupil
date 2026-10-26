@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PUPIL_", env_file=".env")
 
     mode: Literal["local", "remote"] = "local"
+    # Where `pnpm start` serves. `pnpm dev` uses 8787 regardless, as the client's proxy expects.
     host: str = "127.0.0.1"
     port: int = 8787
 
