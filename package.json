@@ -1,6 +1,7 @@
 {
   "name": "pupil",
   "private": true,
+  "license": "AGPL-3.0-only",
   "packageManager": "pnpm@10.11.1",
   "scripts": {
     "start": "pnpm --filter client build && uv run --project server python -m pupil_server --client client/dist",
