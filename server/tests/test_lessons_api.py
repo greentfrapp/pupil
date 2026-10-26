@@ -45,6 +45,7 @@ LESSON = Lesson(
     title="Lists",
     purpose="lesson",
     syllabus_id="syl_1",
+    unit_id="u1",
     items=[TeachCard(id="c1", title="Lists", text="A list holds items."), *questions(["o1"])],
 )
 

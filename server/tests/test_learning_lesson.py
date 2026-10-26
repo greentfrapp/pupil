@@ -189,6 +189,7 @@ def lesson(
         title="Placement",
         purpose="placement" if syllabus_id is None else "lesson",
         syllabus_id=syllabus_id,
+        unit_id=None if syllabus_id is None else "u1",
         items=items
         or [
             choice("q1", correct=("a",)).model_copy(update={"objective_ids": list(tags)}),
@@ -204,7 +205,9 @@ def test_lesson_rejects_duplicate_item_ids():
 
 def test_lesson_needs_a_question():
     with pytest.raises(ValidationError, match="needs at least one question"):
-        Lesson(id="les", title="t", purpose="lesson", syllabus_id="syl_1", items=[card()])
+        Lesson(
+            id="les", title="t", purpose="lesson", syllabus_id="syl_1", unit_id="u1", items=[card()]
+        )
 
 
 def test_placement_has_no_teach_cards():
@@ -212,9 +215,11 @@ def test_placement_has_no_teach_cards():
         Lesson(id="les", title="t", purpose="placement", items=[card(), choice("q1")])
 
 
-def test_a_lesson_needs_a_syllabus():
+def test_a_lesson_needs_a_syllabus_and_unit():
     with pytest.raises(ValidationError, match="a lesson needs a syllabus_id"):
-        Lesson(id="les", title="t", purpose="lesson", items=[choice("q1")])
+        Lesson(id="les", title="t", purpose="lesson", unit_id="u1", items=[choice("q1")])
+    with pytest.raises(ValidationError, match="a lesson needs the unit_id"):
+        Lesson(id="les", title="t", purpose="lesson", syllabus_id="syl_1", items=[choice("q1")])
 
 
 def test_lesson_without_a_syllabus_rejects_tags():
@@ -273,6 +278,7 @@ def mixed_lesson() -> Lesson:
         title="Mixed",
         purpose="lesson",
         syllabus_id="syl_1",
+        unit_id="u1",
         items=[
             card("c1"),
             choice("q1", correct=("b",)),
@@ -387,6 +393,7 @@ def test_describe_attempt_shows_the_newer_question_types_in_words():
         title="Mixed",
         purpose="lesson",
         syllabus_id="syl_1",
+        unit_id="u1",
         items=[
             fill_blank().model_copy(update={"id": "q1"}),
             ordering("boil", "pour").model_copy(update={"id": "q2"}),

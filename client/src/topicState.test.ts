@@ -25,6 +25,7 @@ function topic(fields: Partial<Topic> = {}): Topic {
     lessons: [],
     path: [],
     next_lesson_id: null,
+    finished: false,
     last_run: null,
     ...fields,
   }
@@ -44,6 +45,11 @@ describe('screen', () => {
     const lessons = [lesson('lesson', 1), lesson('lesson', 0)]
     expect(screen(topic({ syllabus, lessons }))).toBe('path')
   })
+
+  it('is finished once every lesson on the path is taken', () => {
+    const lessons = [lesson('lesson', 1)]
+    expect(screen(topic({ syllabus, lessons, finished: true }))).toBe('finished')
+  })
 })
 
 describe('nextUp', () => {
@@ -62,6 +68,15 @@ describe('nextUp', () => {
     expect(nextUp(topic({ last_run: run('running') }))).toEqual({
       kind: 'waiting',
       job: 'next_lesson',
+    })
+  })
+
+  it('is done when the path is finished, unless a run is adding to it', () => {
+    expect(nextUp(topic({ finished: true, last_run: run('done') }))).toEqual({ kind: 'done' })
+    const extending = { job: 'extend' as const, state: 'running' as const, error: null }
+    expect(nextUp(topic({ finished: true, last_run: extending }))).toEqual({
+      kind: 'waiting',
+      job: 'extend',
     })
   })
 

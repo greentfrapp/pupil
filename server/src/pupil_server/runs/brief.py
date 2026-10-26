@@ -10,8 +10,8 @@ from datetime import datetime
 
 from pupil_server.db import Database
 from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
-from pupil_server.db.topics import TopicRepo
 from pupil_server.learning.lesson import describe_attempt
+from pupil_server.learning.path import Stop
 from pupil_server.learning.topic import Topic
 from pupil_server.runs.jobs import INSTRUCTIONS, Job
 
@@ -35,12 +35,25 @@ LEVEL = {"new": "new to this", "basics": "knows the basics", "well": "knows it w
 
 
 async def build_brief(
-    db: Database, learner_id: str, topic: Topic, job: Job, since: datetime | None
+    db: Database,
+    learner_id: str,
+    topic: Topic,
+    job: Job,
+    since: datetime | None,
+    stop: Stop | None = None,
 ) -> str:
-    """The brief for a run doing `job`, with the results of attempts made after `since`."""
+    """The brief for a run doing `job`, with the results of attempts made after `since`. A
+    run writing the next lesson is told which stop on the path it's for."""
     profile = topic.profile
+    task = INSTRUCTIONS[job]
+    if job == "next_lesson" and stop is not None:
+        last = " (the unit's last)" if stop.number == stop.of else ""
+        task += (
+            f"\n\nThis lesson is lesson {stop.number} of {stop.of}{last} in unit "
+            f"{stop.unit.id!r} ({stop.unit.title}); pass unit_id {stop.unit.id!r}."
+        )
     sections = [
-        f"# Your job\n{INSTRUCTIONS[job]}",
+        f"# Your job\n{task}",
         "\n".join(
             [
                 f"# The topic\nThe learner asked to learn: {topic.request!r}",
@@ -52,8 +65,9 @@ async def build_brief(
         ),
     ]
 
-    notes = await TopicRepo(db).notes(learner_id, topic.id)
-    sections.append("# Your notes\n" + ("\n".join(f"- {n.text}" for n in notes) or "None yet."))
+    # Off with the add_note tool, until learners can give feedback (step 5).
+    # notes = await TopicRepo(db).notes(learner_id, topic.id)
+    # sections.append("# Your notes\n" + ("\n".join(f"- {n.text}" for n in notes) or "None yet."))
 
     syllabus = await SyllabusRepo(db).for_topic(learner_id, topic.id)
     sections.append(
@@ -78,9 +92,10 @@ async def build_brief(
             summary = f"taken {times}, latest {latest.correct} of {len(latest.results)} right"
         else:
             summary = "not taken yet"
+        kind = f"unit {lesson.unit_id}" if lesson.unit_id else lesson.purpose
         lines.append(
-            f"- {lesson.title!r} ({lesson.id}, {lesson.purpose}, "
-            f"{len(lesson.questions)} questions): {summary}"
+            f"- {lesson.title!r} ({lesson.id}, {kind}, {len(lesson.questions)} questions): "
+            f"{summary}"
         )
     sections.append("# Recent lessons, oldest first\n" + ("\n".join(lines) or "None yet."))
     return "\n\n".join(sections)

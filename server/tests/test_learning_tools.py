@@ -43,6 +43,7 @@ def unit(uid: str, *prerequisites: str) -> dict:
         "summary": "",
         "objectives": [{"text": f"Can do {uid}"}],
         "prerequisites": list(prerequisites),
+        "lessons": 3,
     }
 
 
@@ -94,6 +95,7 @@ async def create_lesson(call, syllabus: dict, unit_id: str) -> str:
         title="Basics",
         purpose="lesson",
         syllabus_id=syllabus["id"],
+        unit_id=unit_id,
         items=tagged(objective_id(syllabus, unit_id)),
     )
     return created.output["lesson_id"]
@@ -262,6 +264,7 @@ async def test_create_lesson_stores_it_with_an_assigned_id(call, db: Database):
         title="Functions",
         purpose="lesson",
         syllabus_id=syllabus["id"],
+        unit_id="basics",
         keep_order=True,
         items=[CARD, *tagged(objective_id(syllabus, "basics"))],
     )
@@ -269,7 +272,7 @@ async def test_create_lesson_stores_it_with_an_assigned_id(call, db: Database):
     assert lesson_id.startswith("les_")
 
     stored = await LessonRepo(db).get(LOCAL_LEARNER, lesson_id)
-    assert stored.syllabus_id == syllabus["id"]
+    assert (stored.syllabus_id, stored.unit_id) == (syllabus["id"], "basics")
     assert stored.keep_order
     assert isinstance(stored.items[0], TeachCard)
     assert [q.id for q in stored.questions] == ["q1", "q2"]
@@ -282,10 +285,27 @@ async def test_create_lesson_checks_tags(call):
         title="Functions",
         purpose="lesson",
         syllabus_id=syllabus["id"],
+        unit_id="basics",
         items=tagged("obj_unknown"),
     )
     assert bad.is_error
     assert "objective ids not in syllabus" in bad.output
+
+
+async def test_create_lesson_refuses_a_unit_with_all_its_lessons(call):
+    syllabus = await create(call)
+    for _ in range(3):
+        await create_lesson(call, syllabus, "basics")
+    extra = await call(
+        "create_lesson",
+        title="Basics",
+        purpose="lesson",
+        syllabus_id=syllabus["id"],
+        unit_id="basics",
+        items=tagged(objective_id(syllabus, "basics")),
+    )
+    assert extra.is_error
+    assert "unit 'basics' already has all its 3 lessons" in extra.output
 
 
 async def test_an_invalid_lesson_comes_back_as_an_error(call):
@@ -321,12 +341,7 @@ async def test_what_a_run_creates_is_filed_under_its_topic(call, db: Database, t
     assert await LessonRepo(db).topic_of(LOCAL_LEARNER, lesson_id) == topic_id
 
 
-async def test_a_run_can_keep_notes_and_read_past_lessons(call, db: Database, topic_id: str):
-    noted = await call("add_note", text="prefers real-world examples")
-    assert not noted.is_error
-    notes = await TopicRepo(db).notes(LOCAL_LEARNER, topic_id)
-    assert [n.text for n in notes] == ["prefers real-world examples"]
-
+async def test_a_run_can_read_past_lessons(call):
     lesson_id = await create_lesson(call, await create(call), "basics")
     read = await call("get_lesson", lesson_id=lesson_id)
     assert [q["id"] for q in read.output["items"]] == ["q1", "q2"]

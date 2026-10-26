@@ -34,16 +34,18 @@ export interface LessonSummary {
   latest_correct: number | null
 }
 
-/** A unit of the syllabus, as a stop on the path. */
+/** A unit of the syllabus, with its lessons as stops on the path. */
 export interface PathUnit {
   unit_id: string
   title: string
   summary: string
-  /** Its lessons, oldest first. */
+  /** How many lessons the unit takes. */
+  stops: number
+  /** The lessons written for it so far, oldest first; the rest of its stops are to come. */
   lesson_ids: string[]
 }
 
-export type Job = 'placement' | 'plan' | 'next_lesson'
+export type Job = 'placement' | 'plan' | 'next_lesson' | 'extend'
 
 export interface RunStatus {
   job: Job
@@ -63,6 +65,8 @@ export interface Topic {
   path: PathUnit[]
   /** The oldest lesson not taken yet, if any. */
   next_lesson_id: string | null
+  /** Every lesson on the path has been taken. */
+  finished: boolean
   last_run: RunStatus | null
 }
 
@@ -83,4 +87,9 @@ export function getTopic(id: string): Promise<Topic> {
 /** Start the run the topic needs, e.g. to try again after one failed. */
 export function prepareTopic(id: string): Promise<Topic> {
   return postJson(`/api/topics/${id}/prepare`)
+}
+
+/** Go further than a finished topic's path: the agent adds units, then their lessons. */
+export function extendTopic(id: string): Promise<Topic> {
+  return postJson(`/api/topics/${id}/extend`)
 }

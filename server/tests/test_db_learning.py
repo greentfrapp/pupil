@@ -66,6 +66,7 @@ def lesson(lid: str = "les_1", syllabus_id: str | None = "syl_1", tags=("o1", "o
         title="Check",
         purpose="lesson" if tagged else "placement",
         syllabus_id=syllabus_id,
+        unit_id="u1" if tagged else None,
         items=[
             MultipleChoice(
                 id="q1",

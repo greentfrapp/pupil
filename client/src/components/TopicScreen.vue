@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { getTopic, prepareTopic, type Job, type LessonSummary, type Topic } from '../api/topics'
+import {
+  extendTopic,
+  getTopic,
+  prepareTopic,
+  type Job,
+  type LessonSummary,
+  type Topic,
+} from '../api/topics'
 import { nextUp, screen } from '../topicState'
 
 const props = defineProps<{ topicId: string }>()
@@ -31,11 +38,12 @@ function show(t: Topic) {
   if (t.last_run?.state === 'running') timer = setTimeout(load, POLL_MS)
 }
 
-async function tryAgain() {
+/** Ask for a run: the one the topic needs, after a failure, or one to go further. */
+async function ask(request: (id: string) => Promise<Topic>) {
   if (busy.value) return
   busy.value = true
   try {
-    show(await prepareTopic(props.topicId))
+    show(await request(props.topicId))
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -57,11 +65,18 @@ const placement = computed(() =>
 const nextLesson = computed(() =>
   next.value?.kind === 'ready' ? lessons.value.get(next.value.lessonId) : undefined,
 )
+/** Lessons from the plan the learner has taken, for the finished screen. */
+const taken = computed(() =>
+  (topic.value?.lessons ?? []).filter((l) => l.purpose === 'lesson' && l.attempts > 0),
+)
+const takenCorrect = computed(() => taken.value.reduce((n, l) => n + (l.latest_correct ?? 0), 0))
+const takenQuestions = computed(() => taken.value.reduce((n, l) => n + l.questions, 0))
 
 const WAITING: Record<Job, string> = {
   placement: 'Writing a few questions to see what you know…',
   plan: 'Building your plan…',
   next_lesson: 'Writing your next lesson…',
+  extend: 'Adding more to your plan…',
 }
 
 function score(l: LessonSummary): string {
@@ -128,13 +143,38 @@ const buttonClass =
             <span class="flex flex-col">
               <span class="font-semibold">{{ unit.title }}</span>
               <span class="text-gray-600">{{ unit.summary }}</span>
+              <span class="text-sm text-gray-400">
+                {{ unit.stops }} {{ unit.stops === 1 ? 'lesson' : 'lessons' }}
+              </span>
             </span>
           </li>
         </ol>
       </template>
 
-      <!-- The path -->
+      <!-- The path, under a celebration once it's finished -->
       <template v-else-if="topic.syllabus">
+        <div
+          v-if="current === 'finished'"
+          class="flex flex-col gap-3 rounded-xl border-2 border-green-200 bg-green-50 p-5"
+        >
+          <h2 class="text-2xl font-bold">You've finished {{ topic.request }}!</h2>
+          <p class="text-lg">
+            {{ taken.length }} {{ taken.length === 1 ? 'lesson' : 'lessons' }}, and
+            <strong>{{ takenCorrect }} of {{ takenQuestions }}</strong> questions right.
+          </p>
+          <template v-if="next?.kind === 'done'">
+            <p class="text-gray-700">
+              Want to keep going? Pupil can add units that go deeper, picking up from here.
+            </p>
+            <button
+              :disabled="busy"
+              :class="[buttonClass, 'self-start']"
+              @click="ask(extendTopic)"
+            >
+              Go further
+            </button>
+          </template>
+        </div>
         <div>
           <h2 class="text-2xl font-bold">{{ topic.syllabus.goal }}</h2>
           <p v-if="topic.syllabus.rationale" class="text-gray-600">
@@ -156,7 +196,7 @@ const buttonClass =
             <p :class="['text-sm', unit.lesson_ids.length ? 'text-gray-600' : 'text-gray-400']">
               {{ unit.summary }}
             </p>
-            <div v-if="unit.lesson_ids.length" class="mt-3 flex flex-wrap gap-2">
+            <div class="mt-3 flex flex-wrap gap-2">
               <template v-for="id in unit.lesson_ids" :key="id">
                 <button
                   v-if="lessons.get(id)"
@@ -176,6 +216,14 @@ const buttonClass =
                   </span>
                 </button>
               </template>
+              <!-- Stops whose lessons aren't written yet -->
+              <span
+                v-for="k in unit.stops - unit.lesson_ids.length"
+                :key="`stop-${k}`"
+                class="rounded-full border-2 border-dashed border-gray-200 px-4 py-1.5 text-gray-400"
+              >
+                Lesson {{ unit.lesson_ids.length + k }}
+              </span>
             </div>
           </li>
         </ol>
@@ -184,7 +232,7 @@ const buttonClass =
 
     <!-- What's next: start it, wait for it, or ask for it again -->
     <footer
-      v-if="topic && next"
+      v-if="topic && next && next.kind !== 'done'"
       class="sticky bottom-0 border-t-2 border-gray-100 bg-white px-4 py-5"
     >
       <div class="mx-auto flex max-w-xl items-center justify-end gap-3">
@@ -203,7 +251,9 @@ const buttonClass =
           <p class="flex-1 text-red-600">
             Something went wrong preparing this<span v-if="next.error">: {{ next.error }}</span>
           </p>
-          <button :disabled="busy" :class="buttonClass" @click="tryAgain">Try again</button>
+          <button :disabled="busy" :class="buttonClass" @click="ask(prepareTopic)">
+            Try again
+          </button>
         </template>
       </div>
     </footer>

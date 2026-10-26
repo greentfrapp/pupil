@@ -19,9 +19,11 @@ async function load() {
 onMounted(load)
 
 function progress(topic: Topic): string {
+  if (topic.finished) return 'Finished'
+  if (!topic.syllabus) return 'Getting started'
   const done = topic.lessons.filter((l) => l.purpose === 'lesson' && l.attempts > 0).length
-  if (done) return `${done} ${done === 1 ? 'lesson' : 'lessons'} done`
-  return topic.syllabus ? 'Ready to start' : 'Getting started'
+  const stops = topic.path.reduce((n, u) => n + u.stops, 0)
+  return `${done} of ${stops} lessons done`
 }
 </script>
 

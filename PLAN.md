@@ -77,7 +77,8 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
 | 1 | `lessons` | Lessons made of questions and teach cards; each answer checked as it's given, with the correct answer and explanation shown; whole-lesson retries, shuffled; results read by the agent instead of reported; a lesson player replacing the quiz modal | — | Done |
 | 2 | `question-types` | Fill in the blank, ordering and matching, with grading and inputs in the player | 1 | Done |
 | 3 | `agent-runs` | Topics; one-off agent runs with a brief, profile and notes; run logs; the next lesson generated in the background, one run per topic at a time. Mostly server work. | 1 | Done |
-| 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Done (not merged) |
+| 4 | `topic-path` | Fixed setup questions, placement with "I don't know", a path screen; removes the chat and resuming conversations. Mostly client work. | 3 | Done |
+| 4b | `lesson-stops` | Lessons as stops on the path, set by the plan; one lesson written ahead; topics that end, with Go further. From the first real session. | 4 | Done (not merged) |
 | 5 | `steering` | One-tap lesson feedback, syllabus proposals to accept or skip, and "Ask about this" | 4 | Not started |
 | 6 | `review` | Mastery computed from evidence, path progress, and spaced review lessons | 4 | Not started |
 
@@ -274,6 +275,48 @@ Each step is its own branch, can be merged on its own and builds on the ones bef
   - The billed live tests pass after the chat's removal: Claude fills in the learning
     tools' schemas for a topic, and a real placement run works. Not verified: the screens
     in a browser, and a plan run (with its rationale) with real Claude.
+
+### Step 4b: lesson stops
+From the first real session (Discworld: placement, plan, three lessons, about $0.20 and a
+minute per run). Every run did its job, but a topic had no end: once every unit had a
+lesson, nothing said what came next. And runs used notes as a work log, repeating the
+brief, once even before they knew the lesson's id.
+- **Lesson stops, as in Duolingo:** the plan says how many lessons each unit takes, so the
+  whole path is known from the start. The topic is finished when every lesson on it is
+  taken. Duolingo's courses are written in advance; here the stops are fixed in advance and
+  their lessons written as the learner goes.
+- **One lesson ahead:** runs keep two untaken lessons, the next and one more, so the learner
+  doesn't wait (a run takes about a minute; a lesson two or three). Each lesson is written
+  knowing all results but those of the lesson being taken. Weighed against writing a unit
+  or the whole course at once (adapts less, wastes more when learners stop) and parallel
+  runs (lessons that can't see each other overlap).
+- **Go further:** a finished topic offers a run that adds units to the path; their lessons
+  follow as before.
+- **Notes are off** until step 5 gives learners a way to give feedback: `add_note` and the
+  notes in the brief are commented out, and the table stays.
+- **As built:**
+  - `Unit.lessons` (1 to 10; required in `create_syllabus` and `revise_syllabus`) and
+    `Lesson.unit_id` (required for a lesson, checked against the syllabus). `create_lesson`
+    refuses a unit whose stops all have lessons.
+  - `learning/path.py`: the path (units in learning order, each with its lessons) and the
+    next stop without a lesson. A unit revised below the lessons it has keeps them.
+  - `runs/state.py`: a topic's state (syllabus, lessons, untaken, path, next stop,
+    finished, next job). `next_job` keeps `AHEAD = 2` untaken lessons until the stops run
+    out. A run that did its job starts the next run the topic needs; a failed one doesn't.
+    A run fails if it wrote no lesson (or, extending, added no stops).
+  - The next-lesson brief names the stop ("lesson 2 of 3 (the unit's last) in unit
+    'joins'"), and a unit's last lesson rounds it off. Recent lessons show their unit.
+  - API: path units have `stops`; a topic has `finished`; `POST /api/topics/{id}/extend`
+    (202; 409 when not finished or a run is going) starts the `extend` job.
+  - Client: each unit shows its lessons then its unwritten stops, faded; the plan shows
+    each unit's lesson count; the home screen "x of y lessons done"; a finished topic
+    shows its score and Go further above the path.
+  - Lessons from before this change have no unit, so they're on no unit of the path; a
+    database from step 4 should be reset (the migrations are squashed before release).
+  - Billed live tests pass for the new runs: a plan run with a rationale, whose follow-up
+    run writes the second lesson for the next stop; and Go further on a finished topic,
+    which adds units after the existing ones and then writes their first lesson. Not
+    verified: in a browser.
 
 ### Step 5: steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More
