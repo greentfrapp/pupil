@@ -4,7 +4,13 @@
 
 - **Codex backend:** a second agent backend next to `claude`, so Pupil isn't tied to one model. `AgentBackend` (`agents/base.py`) is the interface; the README already lists Codex.
 
-## Next steps
+## Known issues
+
+- **Lessons written ahead can repeat questions:** the brief lists an untaken lesson by title only, so the next one can ask the same thing (John Keel in the Discworld session). Give the brief its questions, or have the run read it.
+- **A run cut off by a restart** isn't run again until the learner finishes a lesson or taps Try again, losing the lesson written ahead once. Prepare every topic at startup.
+- **Explanations may run long,** up to about 210 characters.
+
+## Possible extensions
 
 ### Steering
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More examples", "More real-world"), saved to the topic's profile and given in the next brief.
@@ -13,12 +19,6 @@
 ### Review
 - Mastery per objective, computed from evidence and shown on the path, deciding how much retries count compared with first attempts.
 - Review lessons that bring back weak or due objectives, by spaced repetition.
-
-## Known issues
-
-- **Lessons written ahead can repeat questions:** the brief lists an untaken lesson by title only, so the next one can ask the same thing (John Keel in the Discworld session). Give the brief its questions, or have the run read it.
-- **A run cut off by a restart** isn't run again until the learner finishes a lesson or taps Try again, losing the lesson written ahead once. Prepare every topic at startup.
-- **Explanations may run long,** up to about 210 characters.
 
 ## Later
 
