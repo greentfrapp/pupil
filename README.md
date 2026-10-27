@@ -19,7 +19,8 @@ The agent writes your next lesson in the background while you take the current o
 You need:
 - [Node.js](https://nodejs.org) 20.19+ and [pnpm](https://pnpm.io) 10
 - [uv](https://docs.astral.sh/uv/) (it fetches the right Python for you)
-- Claude Code or Codex, with a valid subscription
+- Claude Code or Codex, signed in with a valid subscription. Pupil uses Claude unless
+  `PUPIL_AGENT_BACKEND` says `codex` (see Settings).
 
 ```sh
 git clone https://github.com/greentfrapp/pupil.git
@@ -41,7 +42,7 @@ Set these as environment variables, or in a `.env` file in the repo's root:
 | `PUPIL_PORT` | `8787` | Where `pnpm start` serves |
 | `PUPIL_HOST` | `127.0.0.1` | Keep this local: Pupil has no login |
 | `PUPIL_DB_PATH` | `~/Pupil/pupil.db` | Where your topics and lessons are kept |
-| `PUPIL_AGENT_BACKEND` | `claude` | `fake` runs without Claude, for development |
+| `PUPIL_AGENT_BACKEND` | `claude` | The agent that writes your lessons: `claude` or `codex`. `fake` runs without one, for development |
 | `PUPIL_LOG_LEVEL` | `INFO` | |
 
 ## License
