@@ -147,3 +147,6 @@ class ClaudeBackend:
         client = ClaudeSDKClient(build_options(config, self._workdir))
         await client.connect()
         return ClaudeSession(client)
+
+    async def close(self) -> None:
+        pass

@@ -135,6 +135,10 @@ class AgentBackend(Protocol):
 
     async def open_session(self, config: AgentConfig) -> AgentSession: ...
 
+    async def close(self) -> None:
+        """Release what the backend keeps between sessions, once no session is open."""
+        ...
+
 
 def check_capabilities(backend: AgentBackend, config: AgentConfig) -> None:
     if config.web_search and not backend.supports_web_search:

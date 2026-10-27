@@ -71,6 +71,7 @@ def create_app(
                 yield
             finally:
                 await runs.close()
+                await backend.close()
                 await db.close()
         finally:
             lock.release()

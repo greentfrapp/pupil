@@ -40,6 +40,10 @@ def make_backend(name: str) -> AgentBackend:
         from pupil_server.agents.claude import ClaudeBackend
 
         return ClaudeBackend()
+    if name == "codex":
+        from pupil_server.agents.codex import CodexBackend
+
+        return CodexBackend()
     if name == "fake":
         from pupil_server.agents.fake import FakeBackend
 

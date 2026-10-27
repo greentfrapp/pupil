@@ -91,3 +91,6 @@ class FakeBackend:
         session = FakeSession(config, self._script)
         self.sessions.append(session)
         return session
+
+    async def close(self) -> None:
+        pass
