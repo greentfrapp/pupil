@@ -1,4 +1,4 @@
-"""Talks to the real Claude backend. Billed; run with `pytest -m live`."""
+"""Talks to the real agent backends, each test against each. Billed; run with `pytest -m live`."""
 
 from datetime import UTC, datetime
 
@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from pupil_server.agents import AgentConfig, ToolCall, ToolResult, TurnComplete, tool
 from pupil_server.agents.claude import ClaudeBackend
+from pupil_server.agents.codex import CodexBackend
 from pupil_server.app import create_app
 from pupil_server.db import LOCAL_LEARNER, Database
 from pupil_server.db.learning import AttemptRepo, LessonRepo, SyllabusRepo
@@ -20,6 +21,21 @@ from pupil_server.settings import Settings
 
 pytestmark = pytest.mark.live
 
+BACKENDS = {"claude": ClaudeBackend, "codex": CodexBackend}
+
+
+@pytest.fixture(params=list(BACKENDS))
+def backend_name(request) -> str:
+    return request.param
+
+
+@pytest.fixture
+async def backend(backend_name, tmp_path):
+    """For tests that open sessions themselves; an app closes its own backend."""
+    backend = BACKENDS[backend_name](workdir=tmp_path / "agent")
+    yield backend
+    await backend.close()
+
 
 class SecretArgs(BaseModel):
     pass
@@ -30,8 +46,7 @@ async def get_secret_word(_: SecretArgs) -> str:
     return "marmalade"
 
 
-async def test_one_turn_with_a_tool_call(tmp_path):
-    backend = ClaudeBackend(workdir=tmp_path)
+async def test_one_turn_with_a_tool_call(backend):
     config = AgentConfig(
         system_prompt="Answer briefly. Use tools when asked.",
         tools=[get_secret_word],
@@ -48,12 +63,13 @@ async def test_one_turn_with_a_tool_call(tmp_path):
     assert isinstance(events[-1], TurnComplete)
 
 
-async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
-    # The lesson item union becomes a oneOf/$defs/$ref schema; check Claude takes it.
+async def test_the_agent_can_fill_in_the_learning_tool_schemas(backend, tmp_path):
+    # The lesson item union becomes a oneOf/$defs/$ref schema, large enough for Codex to
+    # compact it; check the agent can still fill it in.
     db = await Database.open(tmp_path / "pupil.db")
     profile = Profile(why="curiosity", depth="overview", level="new")
     topic = await TopicRepo(db).create(LOCAL_LEARNER, "Arithmetic", profile)
-    session = await ClaudeBackend(workdir=tmp_path).open_session(
+    session = await backend.open_session(
         AgentConfig(
             system_prompt="You test tools. Do exactly what you are asked, then reply 'done'.",
             tools=learning_tools(db, LOCAL_LEARNER, topic.id),
@@ -78,9 +94,8 @@ async def test_claude_can_fill_in_the_learning_tool_schemas(tmp_path):
     assert "create_lesson" in succeeded
 
 
-def test_a_new_topic_gets_a_placement_lesson_from_a_run(tmp_path):
-    backend = ClaudeBackend(workdir=tmp_path / "agent")
-    app = create_app(Settings(), db_path=tmp_path / "pupil.db", agent_backend=backend)
+def test_a_new_topic_gets_a_placement_lesson_from_a_run(backend_name, tmp_path):
+    app = app_on(backend_name, tmp_path)
     profile = {"why": "curiosity", "depth": "overview", "level": "basics"}
     with TestClient(app) as client:
         created = client.post("/api/topics", json={"request": "Fractions", "profile": profile})
@@ -94,8 +109,8 @@ def test_a_new_topic_gets_a_placement_lesson_from_a_run(tmp_path):
     assert placement["questions"] >= 5
 
 
-def app_on(tmp_path):
-    backend = ClaudeBackend(workdir=tmp_path / "agent")
+def app_on(backend_name: str, tmp_path):
+    backend = BACKENDS[backend_name](workdir=tmp_path / "agent")
     return create_app(Settings(), db_path=tmp_path / "pupil.db", agent_backend=backend)
 
 
@@ -104,10 +119,10 @@ def settle(client: TestClient, topic_id: str) -> dict:
     return client.get(f"/api/topics/{topic_id}").json()
 
 
-def test_a_plan_run_lays_out_the_path_and_the_next_lesson_is_written_ahead(tmp_path):
+def test_a_plan_run_lays_out_the_path_and_the_next_lesson_is_written_ahead(backend_name, tmp_path):
     # New to the topic, so no placement: the plan run, then a run writing the second lesson.
     profile = {"why": "work", "depth": "working", "level": "new"}
-    with TestClient(app_on(tmp_path)) as client:
+    with TestClient(app_on(backend_name, tmp_path)) as client:
         created = client.post("/api/topics", json={"request": "SQL", "profile": profile})
         topic = settle(client, created.json()["id"])
 
@@ -174,8 +189,8 @@ async def finished_topic(db: Database) -> str:
     return topic.id
 
 
-def test_a_finished_topic_goes_further(tmp_path):
-    app = app_on(tmp_path)
+def test_a_finished_topic_goes_further(backend_name, tmp_path):
+    app = app_on(backend_name, tmp_path)
     with TestClient(app) as client:
         topic_id = client.portal.call(finished_topic, app.state.db)
         assert client.get(f"/api/topics/{topic_id}").json()["finished"]
