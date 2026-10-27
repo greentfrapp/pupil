@@ -12,3 +12,4 @@ __pycache__/
 # Local config (settings.py reads PUPIL_* from .env)
 .env
 .env.*
+!.env.example
