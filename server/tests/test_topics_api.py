@@ -242,6 +242,16 @@ def test_a_run_is_logged_from_its_brief(app_with):
     assert run.cost_usd == 0.0
 
 
+def test_runs_use_the_model_and_effort_from_the_settings(tmp_path: Path):
+    backend = FakeBackend([[Call("create_lesson", PLACEMENT)]])
+    settings = Settings(model="m", effort="high")
+    app = create_app(settings, db_path=tmp_path / "t.db", agent_backend=backend)
+    with TestClient(app) as c:
+        settle(c, start(c)["id"])
+    config = backend.sessions[0].config
+    assert (config.model, config.effort) == ("m", "high")
+
+
 class Gated(FakeBackend):
     """A backend whose runs wait until the gate opens."""
 

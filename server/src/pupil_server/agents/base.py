@@ -67,6 +67,8 @@ class AgentConfig(BaseModel):
     """Let the agent search and fetch the web, using the backend's own implementation."""
     model: str | None = None
     """Backend-specific model name; None uses the backend's default."""
+    effort: str | None = None
+    """How hard the model thinks, e.g. "medium"; None uses the backend's default."""
     max_turns: int | None = None
 
 

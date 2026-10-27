@@ -38,6 +38,8 @@ from pupil_server.agents.base import (
 from pupil_server.settings import pupil_home
 
 SERVER = "pupil"
+# An alias, which Claude Code resolves to the current Sonnet.
+DEFAULT_MODEL = "sonnet"
 MCP_PREFIX = f"mcp__{SERVER}__"
 WEB_TOOLS = {"WebSearch": "web_search", "WebFetch": "web_fetch"}
 
@@ -110,7 +112,8 @@ def build_options(config: AgentConfig, workdir: Path) -> ClaudeAgentOptions:
         setting_sources=[],
         permission_mode="dontAsk",
         include_partial_messages=True,
-        model=config.model,
+        model=config.model or DEFAULT_MODEL,
+        effort=config.effort,
         max_turns=config.max_turns,
         cwd=workdir,
     )

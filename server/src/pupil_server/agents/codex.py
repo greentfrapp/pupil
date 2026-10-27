@@ -23,6 +23,7 @@ from openai_codex import (
     CodexConfig,
     Sandbox,
 )
+from openai_codex.types import ReasoningEffort
 
 from pupil_server.agents.base import (
     AgentConfig,
@@ -38,6 +39,8 @@ from pupil_server.agents.mcp_bridge import McpBridge
 from pupil_server.settings import pupil_home
 
 SERVER = "pupil"
+# Codex has no aliases; the first model its model list recommends, as of October 2026.
+DEFAULT_MODEL = "gpt-6.1-sol"
 
 # Codex features that give the agent tools or act on the machine; a run needs none of them.
 FEATURES_OFF = (
@@ -170,10 +173,11 @@ class CodexSession:
         self._bridge = bridge
         self._url = url
         self._max_turns = config.max_turns
+        self._effort = None if config.effort is None else ReasoningEffort(config.effort)
         self._turn: AsyncTurnHandle | None = None
 
     async def send(self, text: str) -> AsyncIterator[AgentEvent]:
-        self._turn = turn = await self._thread.turn(text)
+        self._turn = turn = await self._thread.turn(text, effort=self._effort)
         async for event in run_turn(_notifications(turn), turn.interrupt, self._max_turns):
             yield event
 
@@ -206,7 +210,7 @@ class CodexBackend:
             thread = await codex.thread_start(
                 # Replaces Codex's own coding-agent instructions, as Claude's system prompt does.
                 base_instructions=config.system_prompt,
-                model=config.model,
+                model=config.model or DEFAULT_MODEL,
                 sandbox=Sandbox.read_only,
                 approval_mode=ApprovalMode.deny_all,
                 ephemeral=True,

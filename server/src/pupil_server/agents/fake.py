@@ -44,6 +44,7 @@ def _default_turn(text: str) -> Turn:
 
 class FakeSession:
     def __init__(self, config: AgentConfig, script: list[Turn]) -> None:
+        self.config = config
         self._tools = {t.name: t for t in config.tools}
         self._script = script
         self.received: list[str] = []

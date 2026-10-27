@@ -66,7 +66,7 @@ def create_app(
                 log.error("%s", exc)
                 raise
             app.state.db = db
-            app.state.runs = runs = Runs(db, backend)
+            app.state.runs = runs = Runs(db, backend, config.model, config.effort)
             try:
                 yield
             finally:
