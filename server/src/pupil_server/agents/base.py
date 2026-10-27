@@ -7,6 +7,7 @@ on some `AgentBackend`, and reads `AgentEvent`s back; each backend adapts its ru
 from __future__ import annotations
 
 import inspect
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Protocol, get_type_hints
@@ -90,6 +91,10 @@ class ToolResult(BaseModel):
     id: str
     output: ToolOutput | list[Any] | None
     is_error: bool = False
+
+    def text(self) -> str:
+        """The output as the text an agent reads back: as is, or as JSON."""
+        return self.output if isinstance(self.output, str) else json.dumps(self.output)
 
 
 class TurnComplete(BaseModel):

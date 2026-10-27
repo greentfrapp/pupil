@@ -7,7 +7,6 @@ other MCP servers, and nothing runs that was not allowed up front.
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -88,9 +87,7 @@ def translate(message: Any) -> list[AgentEvent]:
 def _sdk_tool(tool: Tool) -> SdkMcpTool[Any]:
     async def handler(arguments: dict[str, Any]) -> dict[str, Any]:
         result = await tool.invoke("", arguments)
-        output = result.output
-        text = output if isinstance(output, str) else json.dumps(output)
-        return {"content": [{"type": "text", "text": text}], "is_error": result.is_error}
+        return {"content": [{"type": "text", "text": result.text()}], "is_error": result.is_error}
 
     return SdkMcpTool(
         name=tool.name,
