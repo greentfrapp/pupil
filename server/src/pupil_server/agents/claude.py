@@ -82,8 +82,19 @@ def translate(message: Any) -> list[AgentEvent]:
         if message.is_error:
             detail = "; ".join(message.errors or []) or message.result or message.subtype
             return [AgentError(message=detail)]
-        return [TurnComplete(cost_usd=message.total_cost_usd, usage=message.usage)]
+        return [
+            TurnComplete(
+                cost_usd=message.total_cost_usd,
+                usage=message.usage,
+                model=_main_model(message.model_usage or {}),
+            )
+        ]
     return []
+
+
+def _main_model(usage: dict[str, Any]) -> str | None:
+    """The model that wrote most of the turn; Claude Code may use a smaller one on the side."""
+    return max(usage, key=lambda m: usage[m].get("outputTokens", 0), default=None)
 
 
 def _sdk_tool(tool: Tool) -> SdkMcpTool[Any]:

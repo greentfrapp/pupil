@@ -73,6 +73,15 @@ def test_result_maps_to_completion_or_error():
     assert err == AgentError(message="error_max_turns")
 
 
+def test_a_turn_names_the_model_that_wrote_most_of_it():
+    usage = {
+        "claude-haiku-4-5": {"inputTokens": 900, "outputTokens": 20},
+        "claude-sonnet-5-5": {"inputTokens": 300, "outputTokens": 1200},
+    }
+    (done,) = translate(_result(model_usage=usage))
+    assert done.model == "claude-sonnet-5-5"
+
+
 def test_options_take_the_model_and_effort_asked_for(tmp_path: Path):
     options = build_options(AgentConfig(system_prompt="p", model="opus", effort="high"), tmp_path)
     assert (options.model, options.effort) == ("opus", "high")

@@ -95,9 +95,11 @@ def launch_overrides(mcp_url: str, web_search: bool, codex_home: Path) -> tuple[
     )
 
 
-def translate(method: str, payload: dict[str, Any], usage: Any = None) -> list[AgentEvent]:
-    """One app-server notification as app events. `usage` is the latest token usage, for the
-    turn's end; Codex reports no cost."""
+def translate(
+    method: str, payload: dict[str, Any], usage: Any = None, model: str | None = None
+) -> list[AgentEvent]:
+    """One app-server notification as app events. `usage` (the latest token usage) and
+    `model` are for the turn's end; Codex reports no cost."""
     if method == "item/agentMessage/delta":
         return [TextDelta(text=payload["delta"])]
     if method in ("item/started", "item/completed"):
@@ -119,7 +121,7 @@ def translate(method: str, payload: dict[str, Any], usage: Any = None) -> list[A
     if method == "turn/completed":
         turn = payload["turn"]
         if turn["status"] == "completed":
-            return [TurnComplete(cost_usd=None, usage=usage)]
+            return [TurnComplete(cost_usd=None, usage=usage, model=model)]
         error = (turn.get("error") or {}).get("message")
         return [AgentError(message=error or f"the turn was {turn['status']}")]
     return []
@@ -129,6 +131,7 @@ async def run_turn(
     notifications: AsyncIterator[tuple[str, dict[str, Any]]],
     interrupt: Callable[[], Awaitable[Any]],
     max_turns: int | None,
+    model: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """A turn's notifications as app events, stopping it once it makes more tool calls than
     `max_turns` (Codex has no limit of its own)."""
@@ -139,7 +142,7 @@ async def run_turn(
         if method == "thread/tokenUsage/updated":
             usage = payload["tokenUsage"]["total"]
             continue
-        for event in translate(method, payload, usage):
+        for event in translate(method, payload, usage, model):
             if stopped:
                 continue  # until the interrupted turn ends
             if isinstance(event, ToolCall):
@@ -173,12 +176,14 @@ class CodexSession:
         self._bridge = bridge
         self._url = url
         self._max_turns = config.max_turns
+        self._model = config.model or DEFAULT_MODEL
         self._effort = None if config.effort is None else ReasoningEffort(config.effort)
         self._turn: AsyncTurnHandle | None = None
 
     async def send(self, text: str) -> AsyncIterator[AgentEvent]:
         self._turn = turn = await self._thread.turn(text, effort=self._effort)
-        async for event in run_turn(_notifications(turn), turn.interrupt, self._max_turns):
+        notifications = _notifications(turn)
+        async for event in run_turn(notifications, turn.interrupt, self._max_turns, self._model):
             yield event
 
     async def interrupt(self) -> None:

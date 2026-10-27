@@ -62,7 +62,7 @@ def test_the_turn_ends_with_its_usage_or_its_error():
     ]
 
 
-async def collect(notifications: list[tuple[str, dict]], max_turns: int | None):
+async def collect(notifications: list[tuple[str, dict]], max_turns: int | None, model=None):
     interrupts: list[bool] = []
 
     async def stream():
@@ -72,11 +72,11 @@ async def collect(notifications: list[tuple[str, dict]], max_turns: int | None):
     async def interrupt():
         interrupts.append(True)
 
-    events = [e async for e in run_turn(stream(), interrupt, max_turns)]
+    events = [e async for e in run_turn(stream(), interrupt, max_turns, model)]
     return events, interrupts
 
 
-async def test_a_turn_carries_the_latest_usage_to_its_end():
+async def test_a_turn_ends_with_its_model_and_latest_usage():
     events, interrupts = await collect(
         [
             ("thread/tokenUsage/updated", {"tokenUsage": USAGE}),
@@ -85,9 +85,11 @@ async def test_a_turn_carries_the_latest_usage_to_its_end():
             ("turn/completed", completed("completed")),
         ],
         max_turns=4,
+        model="gpt-test",
     )
     assert [e.type for e in events] == ["tool_call", "tool_result", "turn_complete"]
     assert events[-1].usage == USAGE["total"]
+    assert events[-1].model == "gpt-test"
     assert interrupts == []
 
 

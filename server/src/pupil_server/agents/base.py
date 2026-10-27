@@ -103,6 +103,8 @@ class TurnComplete(BaseModel):
     type: Literal["turn_complete"] = "turn_complete"
     cost_usd: float | None = None
     usage: dict[str, Any] | None = None
+    model: str | None = None
+    """The model that did the turn, as the backend names it."""
 
 
 class AgentError(BaseModel):

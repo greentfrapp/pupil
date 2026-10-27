@@ -61,6 +61,8 @@ async def test_one_turn_with_a_tool_call(backend):
     assert any(isinstance(e, ToolCall) and e.name == "get_secret_word" for e in events)
     assert any(isinstance(e, ToolResult) and e.output == "marmalade" for e in events)
     assert isinstance(events[-1], TurnComplete)
+    assert events[-1].model  # Pupil's default model was taken, and the turn names it
+    print(f"{backend.name}: {events[-1].model}")
 
 
 async def test_the_agent_can_fill_in_the_learning_tool_schemas(backend, tmp_path):
