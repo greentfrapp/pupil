@@ -18,7 +18,7 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 
 LOCAL_LEARNER = "lrn_local"
-"""The one learner of a local install. Every record names its learner, ready for remote mode."""
+"""The one learner of a local install. Every record names its learner, ready for accounts."""
 
 Migration = tuple[int, str]
 """A schema version and the SQL that brings the database up to it."""

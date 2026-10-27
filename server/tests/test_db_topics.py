@@ -83,11 +83,12 @@ async def test_another_learners_topic_is_not_found(db: Database):
 
 async def test_a_topics_plan_is_its_newest_syllabus_at_its_latest_revision(db: Database):
     topic = await TopicRepo(db).create(ME, "SQL", PROFILE)
+    other = await TopicRepo(db).create(ME, "Spanish", PROFILE)
     syllabi = SyllabusRepo(db)
     assert await syllabi.for_topic(ME, topic.id) is None
     await syllabi.create(ME, syllabus("syl_old"), topic.id)
     await syllabi.create(ME, syllabus("syl_new"), topic.id)
-    await syllabi.create(ME, syllabus("syl_elsewhere"))
+    await syllabi.create(ME, syllabus("syl_elsewhere"), other.id)
     await syllabi.revise(ME, syllabus("syl_new"))
     plan = await syllabi.for_topic(ME, topic.id)
     assert (plan.id, plan.revision) == ("syl_new", 2)
@@ -95,24 +96,26 @@ async def test_a_topics_plan_is_its_newest_syllabus_at_its_latest_revision(db: D
 
 async def test_a_topics_lessons_are_listed_oldest_first(db: Database):
     topic = await TopicRepo(db).create(ME, "SQL", PROFILE)
+    other = await TopicRepo(db).create(ME, "Spanish", PROFILE)
     lessons = LessonRepo(db)
     await lessons.create(ME, lesson("les_1"), topic.id)
-    await lessons.create(ME, lesson("les_no_topic"))
+    await lessons.create(ME, lesson("les_elsewhere"), other.id)
     await lessons.create(ME, lesson("les_2"), topic.id)
     assert [x.id for x in await lessons.for_topic(ME, topic.id)] == ["les_1", "les_2"]
     assert await lessons.topic_of(ME, "les_1") == topic.id
-    assert await lessons.topic_of(ME, "les_no_topic") is None
+    assert await lessons.topic_of(ME, "les_elsewhere") == other.id
 
 
 async def test_attempts_since_a_time_are_the_topics_only(db: Database):
     topic = await TopicRepo(db).create(ME, "SQL", PROFILE)
+    other = await TopicRepo(db).create(ME, "Spanish", PROFILE)
     lessons, attempts = LessonRepo(db), AttemptRepo(db)
     await lessons.create(ME, lesson("les_1"), topic.id)
     await lessons.create(ME, lesson("les_2"), topic.id)
-    await lessons.create(ME, lesson("les_no_topic"))
+    await lessons.create(ME, lesson("les_elsewhere"), other.id)
     await attempts.submit(ME, attempt("att_old", "les_1", T0))
     await attempts.submit(ME, attempt("att_new", "les_2", T0 + timedelta(hours=2)))
-    await attempts.submit(ME, attempt("att_no_topic", "les_no_topic", T0 + timedelta(hours=3)))
+    await attempts.submit(ME, attempt("att_elsewhere", "les_elsewhere", T0 + timedelta(hours=3)))
 
     since = await attempts.since(ME, topic.id, T0 + timedelta(hours=1))
     assert [g.attempt.id for g in since] == ["att_new"]

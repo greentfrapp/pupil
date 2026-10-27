@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from pupil_server import __version__
 from pupil_server.agents import AgentBackend, make_backend
@@ -37,7 +38,9 @@ def create_app(
     settings: Settings | None = None,
     db_path: Path | None = None,
     agent_backend: AgentBackend | None = None,
+    client_dir: Path | None = None,
 ) -> FastAPI:
+    """The app; with `client_dir`, it also serves the built client from there."""
     config = settings or default_settings
     _configure_logging(config.log_level)
     backend = agent_backend or make_backend(config.agent_backend)
@@ -73,14 +76,16 @@ def create_app(
             lock.release()
 
     app = FastAPI(title="Pupil", version=__version__, lifespan=lifespan)
-    app.state.settings = config
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__, "mode": config.mode}
+        return {"status": "ok", "version": __version__}
 
     app.include_router(lessons.router)
     app.include_router(topics.router)
+    if client_dir is not None:
+        # Last, so the API's routes come first.
+        app.mount("/", StaticFiles(directory=client_dir, html=True), name="client")
     return app
 
 

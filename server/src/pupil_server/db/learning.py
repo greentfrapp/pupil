@@ -36,18 +36,15 @@ class SyllabusRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def create(
-        self, learner_id: str, syllabus: Syllabus, topic_id: str | None = None
-    ) -> Syllabus:
-        """Store a new syllabus as revision 1, whatever revision it carries, for the topic if
-        given; its revisions stay with that topic."""
+    async def create(self, learner_id: str, syllabus: Syllabus, topic_id: str) -> Syllabus:
+        """Store a new syllabus for the topic as revision 1, whatever revision it carries; its
+        revisions stay with that topic."""
         first = syllabus.model_copy(update={"revision": 1})
 
         def work(conn: sqlite3.Connection) -> Syllabus:
             if _latest_revision(conn, syllabus.id) is not None:
                 raise AlreadyExists(f"syllabus {syllabus.id!r} already exists; revise it instead")
-            if topic_id is not None:
-                topic_row(conn, learner_id, topic_id)
+            topic_row(conn, learner_id, topic_id)
             _insert_syllabus(conn, learner_id, first, topic_id)
             return first
 
@@ -111,15 +108,14 @@ class LessonRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def create(self, learner_id: str, lesson: Lesson, topic_id: str | None = None) -> None:
-        """Store a lesson, for the topic if given. One tied to a syllabus must tag only
-        objectives its latest revision has."""
+    async def create(self, learner_id: str, lesson: Lesson, topic_id: str) -> None:
+        """Store a lesson for the topic. One tied to a syllabus must tag only objectives its
+        latest revision has."""
 
         def work(conn: sqlite3.Connection) -> None:
             if conn.execute("SELECT 1 FROM lessons WHERE id = ?", (lesson.id,)).fetchone():
                 raise AlreadyExists(f"lesson {lesson.id!r} already exists")
-            if topic_id is not None:
-                topic_row(conn, learner_id, topic_id)
+            topic_row(conn, learner_id, topic_id)
             if lesson.syllabus_id is not None:
                 lesson.check_tags(_latest_syllabus(conn, learner_id, lesson.syllabus_id))
             conn.execute(
@@ -140,10 +136,10 @@ class LessonRepo:
     async def get(self, learner_id: str, lesson_id: str) -> Lesson:
         return await self._db.run(lambda conn: _lesson(conn, learner_id, lesson_id))
 
-    async def topic_of(self, learner_id: str, lesson_id: str) -> str | None:
-        """The topic the lesson was made for, if any."""
+    async def topic_of(self, learner_id: str, lesson_id: str) -> str:
+        """The topic the lesson was made for."""
 
-        def work(conn: sqlite3.Connection) -> str | None:
+        def work(conn: sqlite3.Connection) -> str:
             row = conn.execute(
                 "SELECT topic_id FROM lessons WHERE learner_id = ? AND id = ?",
                 (learner_id, lesson_id),
@@ -321,7 +317,7 @@ def _latest_syllabus(conn: sqlite3.Connection, learner_id: str, syllabus_id: str
 
 
 def _insert_syllabus(
-    conn: sqlite3.Connection, learner_id: str, syllabus: Syllabus, topic_id: str | None
+    conn: sqlite3.Connection, learner_id: str, syllabus: Syllabus, topic_id: str
 ) -> None:
     conn.execute(
         "INSERT INTO syllabi (id, revision, learner_id, topic_id, body, created_at) "

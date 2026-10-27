@@ -24,7 +24,7 @@ from pupil_server.runs.state import topic_state
 
 router = APIRouter(prefix="/api/topics", tags=["topics"])
 
-# One learner until remote mode adds accounts.
+# One learner, until there are accounts.
 LEARNER = LOCAL_LEARNER
 
 

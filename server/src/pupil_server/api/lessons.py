@@ -20,7 +20,7 @@ from pupil_server.learning.lesson import Answer, Attempt, GradedAttempt, Lesson,
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
-# One learner until remote mode adds accounts.
+# One learner, until there are accounts.
 LEARNER = LOCAL_LEARNER
 
 
@@ -86,6 +86,5 @@ async def submit_attempt(lesson_id: str, body: AttemptIn, request: Request) -> A
         raise HTTPException(422, str(exc)) from None
     # A topic's next lesson is prepared while the learner looks at their results.
     topic_id = await LessonRepo(request.app.state.db).topic_of(LEARNER, lesson_id)
-    if topic_id is not None:
-        await request.app.state.runs.prepare(LEARNER, topic_id)
+    await request.app.state.runs.prepare(LEARNER, topic_id)
     return _summary(graded)
