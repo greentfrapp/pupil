@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     model: str | None = None
     # How hard the model thinks: the levels both Claude and Codex take.
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+
+    @field_validator("db_path")
+    @classmethod
+    def _expand_home(cls, path: Path) -> Path:
+        """A leading ~ is your home folder, as in ~/Pupil/pupil.db."""
+        return path.expanduser()
 
 
 settings = Settings()
