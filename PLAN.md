@@ -18,9 +18,9 @@ gamification yet. Three branches, in order:
 - [x] Waiting and failed runs show at the current node.
 
 **`ui-lesson`**
-- [ ] After Check, the tiles show the right and wrong answers.
-- [ ] Bold green and red feedback panels, motion between questions, a shake on a wrong answer, and short generated sounds with a mute toggle.
-- [ ] A lesson-complete screen with accuracy, time and questions, and the answers to review.
+- [x] After Check, the tiles show the right and wrong answers.
+- [x] Bold green and red feedback panels, motion between questions, and a shake on a wrong answer. (Sound effects left out for now.)
+- [x] A lesson-complete screen with accuracy, time and questions, and the answers to review.
 
 ## Known issues
 
