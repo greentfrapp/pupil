@@ -248,13 +248,17 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     @tool(
         "create_lesson",
         "Create a short lesson that teaches mostly by asking: 8 to 12 questions, or 10 to 15 "
-        "from easy to hard for placement. The app grades it, so every question needs an exact "
+        "from easy to hard for placement. Each question's difficulty is a whole number from 1 "
+        "to 5. The app grades it, so every question needs an exact "
         "answer. Mix question types, favouring ones where the learner has to produce or arrange "
         "the answer (fill_blank, text_match, ordering, matching) over true/false and multiple "
         "choice. "
         "Teach inside the questions where you can, "
-        "e.g. 'In Python, // divides and rounds down. What is 7 // 2?'. Add a teach card only "
-        "before a brand-new idea, and rarely. After each answer the learner sees whether they "
+        "e.g. 'In Python, // divides and rounds down. What is 7 // 2?'. Add a teach card "
+        "where the lesson brings in an idea the learner hasn't met. A typed answer may not "
+        "appear in its own prompt, and a word bank needs a few wrong words: lessons breaking "
+        "either are refused, so fix the question and try again. "
+        "After each answer the learner sees whether they "
         "were right, the correct answer and the explanation, so keep explanations to a "
         "sentence or two. Write the whole lesson in this one call. The learner takes it in the "
         "app's lesson player, so don't repeat its questions or answers in your reply. Read how "
@@ -262,6 +266,7 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     )
     async def create_lesson(plan: LessonPlan) -> dict[str, Any]:
         lesson = Lesson(id=new_id("les"), **plan.model_dump())
+        lesson.check_giveaways()
         if lesson.syllabus_id is not None and lesson.unit_id is not None:
             syllabus = await syllabi.get(learner_id, lesson.syllabus_id)
             written = await lessons.for_topic(learner_id, topic_id)

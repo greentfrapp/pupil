@@ -308,6 +308,21 @@ async def test_create_lesson_refuses_a_unit_with_all_its_lessons(call):
     assert "unit 'basics' already has all its 3 lessons" in extra.output
 
 
+async def test_create_lesson_refuses_a_giveaway(call, db: Database, topic_id: str):
+    giveaway = {
+        "kind": "text_match",
+        "id": "q1",
+        "prompt": "Which keyword, def, defines a function?",
+        "difficulty": 1,
+        "explanation": "def starts a function definition.",
+        "accepted": ["def"],
+    }
+    result = await call("create_lesson", title="Placement", purpose="placement", items=[giveaway])
+    assert result.is_error
+    assert "'q1' gives its answer 'def' away in the prompt" in result.output
+    assert await LessonRepo(db).for_topic(LOCAL_LEARNER, topic_id) == []
+
+
 async def test_an_invalid_lesson_comes_back_as_an_error(call):
     result = await call(
         "create_lesson", title="Placement", purpose="placement", items=[CARD, *QUESTIONS]

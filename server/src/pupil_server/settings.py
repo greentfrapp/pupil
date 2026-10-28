@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Which agent runtime does the runs; "fake" needs no model or credentials.
     agent_backend: Literal["claude", "codex", "fake"] = "claude"
-    # The model for its runs; None takes Pupil's default for the backend (sonnet for Claude).
+    # The model for its runs; None takes Pupil's default for the backend (opus for Claude).
     model: str | None = None
     # How hard the model thinks: the levels both Claude and Codex take.
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"

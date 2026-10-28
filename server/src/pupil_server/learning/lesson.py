@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 import re
+import unicodedata
 from collections import Counter
 from typing import Annotated, ClassVar, Literal
 
@@ -97,7 +98,7 @@ class QuestionBase(BaseModel):
     objective_ids: list[str] = Field(default_factory=list)
     """Syllabus objectives this question tests; required once the lesson is tied to a syllabus."""
     difficulty: int = Field(ge=1, le=5)
-    """1 (easiest) to 5."""
+    """A whole number from 1 (easiest) to 5 (hardest); never a fraction such as 0.4."""
     explanation: str = Field(min_length=1)
     """One or two sentences on why the answer is right. Shown after the learner answers, right
     or wrong, so a lucky guess still teaches."""
@@ -327,7 +328,8 @@ class TeachCard(BaseModel):
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     text: str = Field(min_length=1)
-    """A few sentences introducing a brand-new idea that the questions after it build on."""
+    """2 to 4 sentences that motivate a new idea, saying why it's needed and connecting it to
+    what the learner already knows. The questions after it build on it."""
 
 
 Item = Annotated[AnyQuestion | TeachCard, Field(discriminator="kind")]
@@ -374,6 +376,26 @@ class Lesson(BaseModel):
                 raise ValueError(f"questions tagged without a syllabus_id: {tagged}")
         return self
 
+    def check_giveaways(self) -> None:
+        """Refuse a word bank without wrong words, and a typed answer found in its own prompt.
+
+        Checked when a lesson is written, not whenever one is loaded, so lessons stored before
+        these checks existed still load. Every problem is reported at once.
+        """
+        problems = []
+        for q in self.questions:
+            if isinstance(q, FillBlank) and q.word_bank is not None:
+                if len(q.word_bank) <= len(q.blanks):
+                    problems.append(f"question {q.id!r}'s word bank needs a few wrong words too")
+            elif isinstance(q, FillBlank):
+                # Only the prompt: a line of code can rightly use the answer elsewhere in its text.
+                answers = [a for b in q.blanks for a in b.accepted]
+                problems += _given_away(q.id, q.prompt, answers)
+            elif isinstance(q, TextMatch):
+                problems += _given_away(q.id, q.prompt, q.accepted)
+        if problems:
+            raise ValueError("; ".join(problems))
+
     def check_tags(self, syllabus: Syllabus) -> None:
         """The lesson's unit must be in the syllabus, and every question must test at least one
         objective, and only ones the syllabus has."""
@@ -388,6 +410,23 @@ class Lesson(BaseModel):
         unknown = sorted({t for q in self.questions for t in q.objective_ids} - known)
         if unknown:
             raise ValueError(f"objective ids not in syllabus {syllabus.id!r}: {unknown}")
+
+
+def _words(text: str) -> str:
+    """The text as lowercase words without accents or punctuation, padded with spaces so a
+    whole word or phrase can be found in it with `in`."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    return " " + " ".join(re.findall(r"\w+", plain.casefold())) + " "
+
+
+def _given_away(question_id: str, prompt: str, answers: list[str]) -> list[str]:
+    """A problem for each answer the prompt holds as a whole word or phrase."""
+    words = _words(prompt)
+    return [
+        f"question {question_id!r} gives its answer {answer!r} away in the prompt"
+        for answer in answers
+        if _words(answer).strip() and _words(answer) in words
+    ]
 
 
 def shuffled(lesson: Lesson, rng: random.Random) -> Lesson:
