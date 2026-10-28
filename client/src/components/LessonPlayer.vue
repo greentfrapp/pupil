@@ -11,6 +11,7 @@ import {
   type Question,
 } from '../api/lessons'
 import { answerText, grade, responseText } from '../grading'
+import { renderInline, renderMarkdown } from '../markdown'
 import ChoiceInput from './inputs/ChoiceInput.vue'
 import FillBlankInput from './inputs/FillBlankInput.vue'
 import MatchingInput from './inputs/MatchingInput.vue'
@@ -232,7 +233,7 @@ const buttonClass =
               <span :class="r.correct ? 'text-green-600' : 'text-red-600'">
                 {{ r.correct ? '✓' : '✗' }}
               </span>
-              {{ r.prompt }}
+              <span class="markdown-inline" v-html="renderInline(r.prompt)" />
             </p>
             <p v-if="!r.correct" class="text-sm text-gray-600">
               <template v-if="r.given">You said {{ r.given }}; </template>
@@ -247,12 +248,12 @@ const buttonClass =
       <template v-else-if="item && item.kind === 'teach_card'">
         <p class="text-sm font-semibold tracking-wide text-blue-600 uppercase">New idea</p>
         <h2 class="text-2xl font-bold">{{ item.title }}</h2>
-        <p class="text-lg whitespace-pre-wrap">{{ item.text }}</p>
+        <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />
       </template>
 
       <!-- A question -->
       <template v-else-if="question">
-        <p class="text-xl whitespace-pre-wrap">{{ question.prompt }}</p>
+        <div class="markdown text-xl" v-html="renderMarkdown(question.prompt)" />
 
         <!-- Keyed by run and question, so each starts empty, and is shuffled afresh -->
         <ChoiceInput
@@ -309,7 +310,7 @@ const buttonClass =
             {{ feedback.title }}
           </p>
           <p v-if="!feedback.correct" class="font-medium">Answer: {{ feedback.answer }}</p>
-          <p class="text-gray-700">{{ feedback.explanation }}</p>
+          <div class="markdown text-gray-700" v-html="renderMarkdown(feedback.explanation)" />
         </div>
         <template v-if="finished">
           <p v-if="busy" class="text-gray-500">Saving…</p>

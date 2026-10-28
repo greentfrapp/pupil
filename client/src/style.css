@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+/* Lesson text the agent wrote in Markdown (see markdown.ts). */
+.markdown > * + * {
+  @apply mt-3;
+}
+.markdown a,
+.markdown-inline a {
+  @apply text-blue-600 underline hover:text-blue-800;
+}
+.markdown code,
+.markdown-inline code {
+  @apply rounded bg-gray-100 px-1 text-[0.9em];
+}
+.markdown ul {
+  @apply list-disc pl-6;
+}
+.markdown ol {
+  @apply list-decimal pl-6;
+}
