@@ -53,7 +53,15 @@ How the learner's setup answers shape your work:
   - overview: a few units on the key ideas; easier questions.
   - working: a full syllabus, up to confident everyday use.
   - expert: advanced units and edge cases too; harder questions.
-- Anything specific they named (an exam, a project, a tool) comes first."""
+- Anything specific they named (an exam, a project, a tool) comes first.
+
+# Checking facts
+The learner trusts every answer key, so a wrong one does real harm. Before you use a fact,
+name, date, number, order or quote you aren't sure of, look it up with web search, preferring
+primary or authoritative sources. If a check changes what you were going to write, use what
+you found; if you can't confirm something, leave it out. Don't search for what you know well:
+checks are for the details models get wrong, such as names, dates, orders, quotes and who did
+what."""
 
 INSTRUCTIONS: dict[Job, str] = {
     "placement": (
@@ -63,6 +71,8 @@ INSTRUCTIONS: dict[Job, str] = {
         "basics to intermediate; if they know it well, from intermediate up."
     ),
     "plan": (
+        "Before planning, search to scope the topic: its core ideas, the usual order to "
+        "learn them in, and common misconceptions. "
         "Create the syllabus for this topic with create_syllabus, sized and ordered by the "
         "setup answers, and starting where the placement results show the learner's knowledge "
         "runs out (from the beginning if there was no placement). Give each unit the number "
@@ -80,7 +90,8 @@ INSTRUCTIONS: dict[Job, str] = {
         "syllabus no longer fits them, revise it first with revise_syllabus."
     ),
     "extend": (
-        "The learner has taken every lesson on their path and wants to go further. Add new "
+        "The learner has taken every lesson on their path and wants to go further. Search "
+        "first to see what lies deeper or wider than the syllabus so far. Add new "
         "units with revise_syllabus that go deeper or wider than the syllabus so far, each "
         "with its number of lessons, and update the rationale to say what the new units add. "
         "Keep the existing units as they are. Don't write lessons: they are written next."

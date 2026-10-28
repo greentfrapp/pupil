@@ -164,6 +164,7 @@ class Runs:
             config = AgentConfig(
                 system_prompt=SYSTEM_PROMPT,
                 tools=learning_tools(self._db, learner_id, topic.id),
+                web_search=True,  # to check facts; see SYSTEM_PROMPT
                 model=self._model,
                 effort=self._effort,
                 max_turns=self._max_turns,
