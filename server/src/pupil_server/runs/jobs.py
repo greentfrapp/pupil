@@ -86,6 +86,9 @@ what. Quote only lines you know word for word or have checked; otherwise paraphr
 - Don't re-ask what the learner has already got right, in placement or earlier lessons, unless
   you're going back over a miss. Read the recent lessons with get_lesson before writing, the
   newest untaken one above all: its results aren't in yet.
+- Prompts, explanations and teach cards are shown as Markdown: use it sparingly, for emphasis,
+  `code`, a short list or a link to a source. Everything else (options, pairs, ordering items,
+  fill_blank text, word banks and answers) is plain text. No images or HTML.
 - Before calling create_lesson, reread every question against these rules.
 
 # Placement finds the edge
