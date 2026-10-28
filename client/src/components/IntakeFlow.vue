@@ -3,6 +3,9 @@ import { computed, ref } from 'vue'
 import { createTopic, type Depth, type Level, type Why } from '../api/topics'
 import { DEPTH, LEVEL, WHY } from '../setup'
 import { choiceClass, inputClass } from './inputs/styles'
+import Icon from './ui/Icon.vue'
+import ProgressBar from './ui/ProgressBar.vue'
+import PupilButton from './ui/PupilButton.vue'
 
 const emit = defineEmits<{ created: [topicId: string]; close: [] }>()
 
@@ -53,76 +56,97 @@ async function start() {
     busy.value = false
   }
 }
-
-const buttonClass =
-  'self-end rounded-xl bg-blue-600 px-6 py-3 text-lg font-semibold text-white hover:bg-blue-700 disabled:opacity-40'
 </script>
 
 <template>
   <div class="fixed inset-0 z-10 flex flex-col bg-white">
-    <header class="flex items-center gap-4 px-4 py-4">
-      <button class="text-2xl text-gray-400 hover:text-gray-700" aria-label="Back" @click="back">
-        ←
+    <header class="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-4">
+      <button
+        class="flex size-11 items-center justify-center rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+        aria-label="Back"
+        @click="back"
+      >
+        <Icon name="back" />
       </button>
-      <div class="h-3 flex-1 overflow-hidden rounded-full bg-gray-200">
-        <div
-          class="h-full rounded-full bg-green-500 transition-all"
-          :style="{ width: `${(step / steps.length) * 100}%` }"
-        />
-      </div>
+      <ProgressBar :percent="(step / steps.length) * 100" />
     </header>
 
-    <main class="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 overflow-y-auto px-4 py-6">
-      <form
-        v-if="current === 'request'"
-        class="flex flex-col gap-5"
-        @submit.prevent="request.trim() && step++"
-      >
-        <h2 class="text-2xl font-bold">What do you want to learn?</h2>
-        <input
-          v-model="request"
-          :class="inputClass"
-          maxlength="500"
-          placeholder="e.g. SQL, music theory, the French Revolution"
-          autofocus
-        />
-        <button :disabled="!request.trim()" :class="buttonClass">Continue</button>
-      </form>
-
-      <template v-else-if="current === 'specific'">
-        <h2 class="text-2xl font-bold">Anything specific?</h2>
-        <p class="text-gray-600">An exam, a project or a tool you have in mind. Optional.</p>
-        <form class="flex flex-col gap-5" @submit.prevent="start">
-          <input
-            v-model="specific"
-            :class="inputClass"
-            maxlength="300"
-            placeholder="e.g. AP Calculus BC, or a Discord bot"
-            autofocus
-          />
-          <p v-if="error" class="text-red-600">Couldn't start this topic: {{ error }}</p>
-          <button :disabled="busy" :class="buttonClass">
-            {{ busy ? 'Starting…' : specific.trim() ? 'Start learning' : 'Skip and start' }}
-          </button>
-        </form>
-      </template>
-
-      <template v-else>
-        <h2 class="text-2xl font-bold">{{ question.question }}</h2>
-        <div class="flex flex-col gap-2">
-          <button
-            v-for="option in question.options"
-            :key="option.value"
-            :class="choiceClass(answers[question.key].value === option.value)"
-            @click="pick(option.value)"
+    <main class="flex-1 overflow-x-hidden overflow-y-auto">
+      <Transition name="slide" mode="out-in">
+        <div :key="current" class="mx-auto flex w-full max-w-md flex-col gap-5 px-4 py-6">
+          <form
+            v-if="current === 'request'"
+            id="intake-step"
+            class="flex flex-col gap-5"
+            @submit.prevent="request.trim() && step++"
           >
-            <span class="flex flex-col">
-              <span class="font-semibold">{{ option.label }}</span>
-              <span class="text-base text-gray-500">{{ option.detail }}</span>
-            </span>
-          </button>
+            <h2 class="text-2xl">What do you want to learn?</h2>
+            <input
+              v-model="request"
+              :class="inputClass"
+              maxlength="500"
+              placeholder="e.g. SQL, music theory, the French Revolution"
+              autofocus
+            />
+          </form>
+
+          <form
+            v-else-if="current === 'specific'"
+            id="intake-step"
+            class="flex flex-col gap-5"
+            @submit.prevent="start"
+          >
+            <h2 class="text-2xl">Anything specific?</h2>
+            <p class="text-ink-600">An exam, a project or a tool you have in mind. Optional.</p>
+            <input
+              v-model="specific"
+              :class="inputClass"
+              maxlength="300"
+              placeholder="e.g. AP Calculus BC, or a Discord bot"
+              autofocus
+            />
+            <p v-if="error" class="text-coral-600">Couldn't start this topic: {{ error }}</p>
+          </form>
+
+          <template v-else>
+            <h2 class="text-2xl">{{ question.question }}</h2>
+            <div class="flex flex-col gap-3">
+              <button
+                v-for="option in question.options"
+                :key="option.value"
+                :class="choiceClass(answers[question.key].value === option.value)"
+                @click="pick(option.value)"
+              >
+                <span class="flex flex-col">
+                  <span class="font-extrabold">{{ option.label }}</span>
+                  <span class="text-base text-ink-500">{{ option.detail }}</span>
+                </span>
+              </button>
+            </div>
+          </template>
         </div>
-      </template>
+      </Transition>
     </main>
+
+    <!-- The typed steps go on with a button at the bottom; the choices, when one is tapped -->
+    <footer
+      v-if="current === 'request' || current === 'specific'"
+      class="safe-bottom border-t-2 border-ink-200 px-4 pt-5"
+    >
+      <div class="mx-auto max-w-md">
+        <PupilButton
+          v-if="current === 'request'"
+          type="submit"
+          form="intake-step"
+          block
+          :disabled="!request.trim()"
+        >
+          Continue
+        </PupilButton>
+        <PupilButton v-else type="submit" form="intake-step" block :disabled="busy">
+          {{ busy ? 'Starting…' : specific.trim() ? 'Start learning' : 'Skip and start' }}
+        </PupilButton>
+      </div>
+    </footer>
   </div>
 </template>

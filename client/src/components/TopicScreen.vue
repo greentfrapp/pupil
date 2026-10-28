@@ -96,7 +96,7 @@ function score(l: LessonSummary): string {
       >
         <Icon name="back" />
       </button>
-      <h1 class="truncate text-xl font-bold">{{ topic?.request }}</h1>
+      <h1 class="truncate text-xl font-extrabold">{{ topic?.request }}</h1>
     </header>
 
     <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
@@ -106,7 +106,7 @@ function score(l: LessonSummary): string {
       <!-- Before the plan: placement, or waiting for the plan -->
       <template v-else-if="current === 'start'">
         <template v-if="next?.kind === 'ready'">
-          <h2 class="text-2xl font-bold">Let's see what you already know</h2>
+          <h2 class="text-2xl font-extrabold">Let's see what you already know</h2>
           <p class="text-lg text-ink-700">
             A few questions, from easy to hard. When you don't know one, tap
             <strong>I don't know</strong> rather than guessing, so your plan starts in the right
@@ -114,13 +114,13 @@ function score(l: LessonSummary): string {
           </p>
         </template>
         <template v-else-if="placement">
-          <h2 class="text-2xl font-bold">Thanks!</h2>
+          <h2 class="text-2xl font-extrabold">Thanks!</h2>
           <p class="text-lg text-ink-700">
             You got {{ score(placement) }} right. Your plan is built from that.
           </p>
         </template>
         <template v-else-if="topic.profile.level === 'new'">
-          <h2 class="text-2xl font-bold">Starting from the beginning</h2>
+          <h2 class="text-2xl font-extrabold">Starting from the beginning</h2>
           <p class="text-lg text-ink-700">Your plan is built from your answers.</p>
         </template>
       </template>
@@ -128,7 +128,7 @@ function score(l: LessonSummary): string {
       <!-- The plan, shown back until the first lesson is taken -->
       <template v-else-if="current === 'plan' && topic.syllabus">
         <p class="text-sm font-semibold tracking-wide text-lake-600 uppercase">Your plan</p>
-        <h2 class="text-2xl font-bold">{{ topic.syllabus.goal }}</h2>
+        <h2 class="text-2xl font-extrabold">{{ topic.syllabus.goal }}</h2>
         <p v-if="topic.syllabus.rationale" class="text-lg text-ink-700">
           {{ topic.syllabus.rationale }}
         </p>
@@ -156,7 +156,7 @@ function score(l: LessonSummary): string {
           v-if="current === 'finished'"
           class="flex flex-col gap-3 rounded-2xl border-2 border-leaf-200 bg-leaf-50 p-5"
         >
-          <h2 class="text-2xl font-bold">You've finished {{ topic.request }}!</h2>
+          <h2 class="text-2xl font-extrabold">You've finished {{ topic.request }}!</h2>
           <p class="text-lg">
             {{ taken.length }} {{ taken.length === 1 ? 'lesson' : 'lessons' }}, and
             <strong>{{ takenCorrect }} of {{ takenQuestions }}</strong> questions right.
@@ -171,7 +171,7 @@ function score(l: LessonSummary): string {
           </template>
         </div>
         <div>
-          <h2 class="text-2xl font-bold">{{ topic.syllabus.goal }}</h2>
+          <h2 class="text-2xl font-extrabold">{{ topic.syllabus.goal }}</h2>
           <p v-if="topic.syllabus.rationale" class="text-ink-600">
             {{ topic.syllabus.rationale }}
           </p>

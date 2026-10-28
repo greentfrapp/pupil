@@ -200,7 +200,7 @@ const footerStyle = computed(() => {
 
       <!-- A placement lesson that has already been taken -->
       <template v-else-if="taken">
-        <h2 class="text-2xl font-bold">{{ lesson.title }}</h2>
+        <h2 class="text-2xl font-extrabold">{{ lesson.title }}</h2>
         <p class="text-lg">
           You've already taken this placement and got
           <strong>{{ attempts[0].correct }} of {{ attempts[0].total }}</strong> right.
@@ -209,7 +209,7 @@ const footerStyle = computed(() => {
 
       <!-- Results, once the lesson is finished -->
       <template v-else-if="finished">
-        <h2 class="text-2xl font-bold">
+        <h2 class="text-2xl font-extrabold">
           {{ lesson.purpose === 'placement' ? 'Placement done!' : 'Lesson complete!' }}
         </h2>
         <p class="text-lg">
@@ -241,7 +241,7 @@ const footerStyle = computed(() => {
       <!-- A teach card -->
       <template v-else-if="item && item.kind === 'teach_card'">
         <p class="text-sm font-semibold tracking-wide text-lake-600 uppercase">New idea</p>
-        <h2 class="text-2xl font-bold">{{ item.title }}</h2>
+        <h2 class="text-2xl font-extrabold">{{ item.title }}</h2>
         <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />
       </template>
 
@@ -300,7 +300,7 @@ const footerStyle = computed(() => {
     >
       <div class="mx-auto flex max-w-md flex-col gap-3">
         <div v-if="feedback">
-          <p :class="['text-xl font-bold', feedback.correct ? 'text-leaf-700' : 'text-coral-700']">
+          <p :class="['text-xl font-extrabold', feedback.correct ? 'text-leaf-700' : 'text-coral-700']">
             {{ feedback.title }}
           </p>
           <p v-if="!feedback.correct" class="font-medium">Answer: {{ feedback.answer }}</p>
