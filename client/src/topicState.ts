@@ -34,3 +34,82 @@ export function nextUp(topic: Topic): NextUp {
   if (topic.finished) return { kind: 'done' }
   return { kind: 'stuck', error: run?.error ?? null }
 }
+
+/**
+ * A stop on the path. done: taken. current: the lesson to take next. ready: written ahead,
+ * after the current one. locked: not written yet.
+ */
+export type NodeState = 'done' | 'current' | 'ready' | 'locked'
+
+export interface PathNode {
+  /** Unique on the path, for keys and scrolling. */
+  key: string
+  lessonId: string | null
+  title: string | null
+  state: NodeState
+  /** Where the learner is up to: the current lesson, or else the first stop still to write. */
+  here: boolean
+  /** The latest attempt's score, on a done lesson. */
+  correct: number | null
+  questions: number | null
+}
+
+export interface PathSection {
+  unitId: string
+  title: string
+  summary: string
+  nodes: PathNode[]
+  done: number
+}
+
+/** The path's units, each with a node per stop, in learning order. */
+export function pathSections(topic: Topic): PathSection[] {
+  const lessons = new Map(topic.lessons.map((l) => [l.lesson_id, l]))
+  const sections = topic.path.map((unit) => {
+    const nodes: PathNode[] = []
+    for (let i = 0; i < unit.stops; i++) {
+      const lesson = lessons.get(unit.lesson_ids[i])
+      const key = `${unit.unit_id}-${i}`
+      if (!lesson) {
+        nodes.push({
+          key,
+          lessonId: null,
+          title: null,
+          state: 'locked',
+          here: false,
+          correct: null,
+          questions: null,
+        })
+        continue
+      }
+      const taken = lesson.attempts > 0
+      const state: NodeState = taken
+        ? 'done'
+        : lesson.lesson_id === topic.next_lesson_id
+          ? 'current'
+          : 'ready'
+      nodes.push({
+        key,
+        lessonId: lesson.lesson_id,
+        title: lesson.title,
+        state,
+        here: state === 'current',
+        correct: taken ? lesson.latest_correct : null,
+        questions: taken ? lesson.questions : null,
+      })
+    }
+    return {
+      unitId: unit.unit_id,
+      title: unit.title,
+      summary: unit.summary,
+      nodes,
+      done: nodes.filter((n) => n.state === 'done').length,
+    }
+  })
+  const all = sections.flatMap((s) => s.nodes)
+  if (!all.some((n) => n.here)) {
+    const upcoming = all.find((n) => n.state === 'locked')
+    if (upcoming) upcoming.here = true
+  }
+  return sections
+}

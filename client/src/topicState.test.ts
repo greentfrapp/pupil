@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LessonSummary, RunStatus, Topic } from './api/topics'
-import { nextUp, screen } from './topicState'
+import { nextUp, pathSections, screen } from './topicState'
 
 const syllabus = { id: 's', topic: 'SQL', goal: 'g', rationale: 'r', revision: 1 }
 
@@ -84,5 +84,80 @@ describe('nextUp', () => {
     const failed = topic({ last_run: run('failed', 'the run was cut off') })
     expect(nextUp(failed)).toEqual({ kind: 'stuck', error: 'the run was cut off' })
     expect(nextUp(topic({ last_run: run('done') }))).toEqual({ kind: 'stuck', error: null })
+  })
+})
+
+describe('pathSections', () => {
+  function taken(id: string, correct: number): LessonSummary {
+    return { ...lesson('lesson', 1), lesson_id: id, title: id, questions: 5, latest_correct: correct }
+  }
+  function untaken(id: string): LessonSummary {
+    return { ...lesson('lesson', 0), lesson_id: id, title: id, questions: 5 }
+  }
+  const unit = (id: string, stops: number, lesson_ids: string[]) => ({
+    unit_id: id,
+    title: `Unit ${id}`,
+    summary: 's',
+    stops,
+    lesson_ids,
+  })
+
+  it('marks lessons done, current, ready and locked, with scores on the done ones', () => {
+    const t = topic({
+      syllabus,
+      lessons: [lesson('placement', 1), taken('a', 4), untaken('b'), untaken('c')],
+      path: [unit('u1', 2, ['a', 'b']), unit('u2', 3, ['c'])],
+      next_lesson_id: 'b',
+    })
+    const sections = pathSections(t)
+    const nodes = sections.flatMap((s) => s.nodes)
+    expect(nodes.map((n) => [n.lessonId, n.state])).toEqual([
+      ['a', 'done'],
+      ['b', 'current'],
+      ['c', 'ready'],
+      [null, 'locked'],
+      [null, 'locked'],
+    ])
+    expect([nodes[0].correct, nodes[0].questions]).toEqual([4, 5])
+    expect([nodes[1].correct, nodes[1].questions]).toEqual([null, null])
+    expect(sections.map((s) => s.done)).toEqual([1, 0])
+  })
+
+  it('leaves the placement lesson off the path', () => {
+    const t = topic({ syllabus, lessons: [lesson('placement', 1)], path: [unit('u1', 1, [])] })
+    expect(pathSections(t).flatMap((s) => s.nodes.map((n) => n.lessonId))).toEqual([null])
+  })
+
+  it('puts the learner at the current lesson', () => {
+    const t = topic({
+      syllabus,
+      lessons: [taken('a', 5), untaken('b')],
+      path: [unit('u1', 3, ['a', 'b'])],
+      next_lesson_id: 'b',
+    })
+    expect(pathSections(t)[0].nodes.map((n) => n.here)).toEqual([false, true, false])
+  })
+
+  it('puts the learner at the first stop still to write when no lesson is waiting', () => {
+    const t = topic({
+      syllabus,
+      lessons: [taken('a', 3)],
+      path: [unit('u1', 1, ['a']), unit('u2', 2, [])],
+    })
+    const sections = pathSections(t)
+    expect(sections.map((s) => s.nodes.map((n) => n.here))).toEqual([[false], [true, false]])
+    expect(sections[1].nodes[0].state).toBe('locked')
+  })
+
+  it('has no one place to be once every lesson is taken', () => {
+    const t = topic({
+      syllabus,
+      lessons: [taken('a', 3), taken('b', 5)],
+      path: [unit('u1', 2, ['a', 'b'])],
+      finished: true,
+    })
+    const nodes = pathSections(t)[0].nodes
+    expect(nodes.map((n) => n.state)).toEqual(['done', 'done'])
+    expect(nodes.some((n) => n.here)).toBe(false)
   })
 })
