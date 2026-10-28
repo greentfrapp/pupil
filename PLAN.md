@@ -13,9 +13,9 @@ gamification yet. Three branches, in order:
 - [x] Home and intake restyled, in a phone-width column centred on desktop.
 
 **`ui-path`**
-- [ ] The topic page as a winding path of round lesson nodes under coloured unit banners: done, current (with a START bubble), ready and locked.
-- [ ] Tapping a node shows its title and score with Start or Review; the path ends in a trophy that opens Go further.
-- [ ] Waiting and failed runs show at the current node.
+- [x] The topic page as a winding path of round lesson nodes under coloured unit banners: done, current (with a START bubble), ready and locked.
+- [x] Tapping a node shows its title and score with Start or Review; the path ends in a trophy that opens Go further.
+- [x] Waiting and failed runs show at the current node.
 
 **`ui-lesson`**
 - [ ] After Check, the tiles show the right and wrong answers.
