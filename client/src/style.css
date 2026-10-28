@@ -158,6 +158,22 @@
   animation: rise 0.2s ease-out;
 }
 
+/* Confetti falls once, tumbling, and fades out. */
+@keyframes confetti {
+  0% {
+    transform: translateY(-2rem) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(540deg);
+    opacity: 0;
+  }
+}
+.confetti {
+  animation: confetti 1.8s ease-in forwards;
+  opacity: 0;
+}
+
 /* Bottom bars clear a phone's home indicator. */
 .safe-bottom {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));

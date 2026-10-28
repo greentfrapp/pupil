@@ -11,6 +11,7 @@ import {
   type Question,
 } from '../api/lessons'
 import { answerText, feedbackFor, grade, responseText } from '../grading'
+import { lessonStats } from '../lessonStats'
 import { renderInline, renderMarkdown } from '../markdown'
 import ChoiceInput from './inputs/ChoiceInput.vue'
 import FillBlankInput from './inputs/FillBlankInput.vue'
@@ -35,6 +36,11 @@ const busy = ref(false)
 const index = ref(0)
 const answers = ref<Record<string, Answer>>({})
 const finished = ref(false)
+// When this run started and finished, for the time it took.
+const startedAt = ref(0)
+const finishedAt = ref(0)
+/** The answers listed on the lesson-complete screen. */
+const reviewing = ref(false)
 
 // Saving the finished attempt. The results come from the answers graded here, so they show
 // whether or not saving works.
@@ -97,11 +103,13 @@ async function load() {
   index.value = 0
   answers.value = {}
   response.value = null
+  reviewing.value = false
   run.value++
   try {
     const loaded = await getLesson(props.lessonId)
     lesson.value = loaded.lesson
     attempts.value = loaded.attempts
+    startedAt.value = Date.now()
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   }
@@ -128,6 +136,7 @@ function dontKnow() {
 function next() {
   if (finished.value) return
   if (isLast.value) {
+    finishedAt.value = Date.now()
     finished.value = true
     save()
     return
@@ -186,6 +195,19 @@ const results = computed(() => {
     })
 })
 
+const stats = computed(() =>
+  finished.value ? lessonStats(answers.value, startedAt.value, finishedAt.value) : null,
+)
+
+// Confetti for the end of a lesson: where each piece falls from, when, its tilt and colour.
+const COLORS = ['bg-leaf-400', 'bg-lake-400', 'bg-coral-400', 'bg-sun-400']
+const CONFETTI = Array.from({ length: 36 }, (_, i) => ({
+  left: (i * 37) % 100,
+  delay: (i % 9) * 0.08,
+  turn: (i * 53) % 360,
+  color: COLORS[i % COLORS.length],
+}))
+
 const footerStyle = computed(() => {
   if (!feedback.value) return 'border-t-2 border-ink-200'
   return feedback.value.correct ? 'rise bg-leaf-100' : 'rise bg-coral-100'
@@ -225,32 +247,75 @@ const footerStyle = computed(() => {
           </template>
 
           <!-- Results, once the lesson is finished -->
-          <template v-else-if="finished">
-            <h2 class="text-2xl font-extrabold">
-              {{ lesson.purpose === 'placement' ? 'Placement done!' : 'Lesson complete!' }}
-            </h2>
-            <p class="text-lg">
-              You got
-              <strong>{{ results.filter((r) => r.correct).length }} of {{ results.length }}</strong>
-              right<span v-if="saved && saved.number > 1"> on attempt {{ saved.number }}</span>.
-            </p>
-            <ol class="flex flex-col gap-2">
+          <template v-else-if="finished && stats">
+            <!-- A burst of confetti -->
+            <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+              <span
+                v-for="(c, i) in CONFETTI"
+                :key="i"
+                :class="['confetti absolute top-0 h-3 w-2 rounded-sm', c.color]"
+                :style="{ left: `${c.left}%`, animationDelay: `${c.delay}s`, rotate: `${c.turn}deg` }"
+              />
+            </div>
+
+            <div class="flex flex-col items-center gap-4 pt-6 text-center">
+              <span
+                class="pop flex size-24 items-center justify-center rounded-full bg-sun-400 text-white shadow-[0_6px_0_var(--color-sun-600)]"
+              >
+                <Icon name="trophy" :size="52" />
+              </span>
+              <h2 class="text-3xl font-black text-sun-600">
+                {{ lesson.purpose === 'placement' ? 'Placement done!' : 'Lesson complete!' }}
+              </h2>
+              <p v-if="saved && saved.number > 1" class="text-ink-500">
+                Attempt {{ saved.number }}
+              </p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div
+                v-for="s in [
+                  { label: 'Accuracy', value: `${stats.accuracy}%`, look: 'border-leaf-500 bg-leaf-500 text-leaf-600' },
+                  { label: 'Time', value: stats.time, look: 'border-lake-500 bg-lake-500 text-lake-600' },
+                  { label: 'Right', value: `${stats.correct}/${stats.total}`, look: 'border-sun-400 bg-sun-400 text-sun-600' },
+                ]"
+                :key="s.label"
+                :class="['pop overflow-hidden rounded-2xl border-2', s.look]"
+              >
+                <p class="py-1 text-center text-xs font-extrabold tracking-wide text-white uppercase">
+                  {{ s.label }}
+                </p>
+                <p class="rounded-xl bg-white py-3 text-center text-xl font-black">
+                  {{ s.value }}
+                </p>
+              </div>
+            </div>
+
+            <PupilButton variant="ghost" block @click="reviewing = !reviewing">
+              {{ reviewing ? 'Hide answers' : 'Review answers' }}
+            </PupilButton>
+            <ol v-if="reviewing" class="flex flex-col gap-2">
               <li
                 v-for="r in results"
                 :key="r.id"
-                class="rounded-xl border-2 border-ink-100 px-4 py-3"
+                :class="[
+                  'flex gap-3 rounded-2xl border-2 px-4 py-3',
+                  r.correct ? 'border-leaf-200 bg-leaf-50' : 'border-coral-200 bg-coral-50',
+                ]"
               >
-                <p class="font-medium">
-                  <span :class="r.correct ? 'text-leaf-600' : 'text-coral-600'">
-                    {{ r.correct ? '✓' : '✗' }}
-                  </span>
-                  <span class="markdown-inline" v-html="renderInline(r.prompt)" />
-                </p>
-                <p v-if="!r.correct" class="text-sm text-ink-600">
-                  <template v-if="r.given">You said {{ r.given }}; </template>
-                  <template v-else>You didn't know; </template>
-                  the answer is {{ r.answer }}.
-                </p>
+                <Icon
+                  :name="r.correct ? 'check' : 'close'"
+                  :size="20"
+                  :class="['mt-0.5 shrink-0', r.correct ? 'text-leaf-500' : 'text-coral-500']"
+                />
+                <div class="min-w-0">
+                  <p class="markdown-inline" v-html="renderInline(r.prompt)" />
+                  <p v-if="!r.correct" class="text-sm text-ink-600">
+                    <template v-if="r.given">You said {{ r.given }}; </template>
+                    <template v-else>You didn't know; </template>
+                    the answer is {{ r.answer }}.
+                  </p>
+                </div>
               </li>
             </ol>
           </template>
