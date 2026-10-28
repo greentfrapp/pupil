@@ -13,9 +13,9 @@ marked wrong for small differences. Three branches, in order:
 - [x] `create_lesson` refuses word banks without wrong words, and typed answers given away in the question.
 
 **`lenient-grading`**
-- [ ] Typed answers forgive case, spacing, punctuation, hyphens, accents, a leading "the", British/American spelling, and one typo in answers of 6+ characters with no digits.
-- [ ] An `exact` flag on a question turns typo and spelling forgiveness off.
-- [ ] The prompt tells the agent about both.
+- [x] Typed answers forgive case, spacing, punctuation, hyphens, accents, a leading "the", British/American spelling, and one typo in answers of 6+ characters with no digits.
+- [x] An `exact` flag on a question keeps strict matching (only spacing, and case unless case-sensitive, are ignored), for code, formulas and answers where one letter changes the meaning.
+- [x] The prompt tells the agent about both.
 
 **`markdown-rendering`**
 - [ ] The lesson player renders Markdown in question prompts, explanations and teach cards, safely (no raw HTML from the agent). Codex already writes source links, such as `[Book overview](https://…)`, which show as raw text until then.
