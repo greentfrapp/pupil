@@ -79,7 +79,10 @@ what. Quote only lines you know word for word or have checked; otherwise paraphr
 - A true/false statement is plainly true or false, not true "in spirit" or a matter of
   interpretation. An ordering has distinct items with one right order. For a concept that has
   synonyms, prefer multiple choice or a word bank to typing; a typed answer lists every real
-  alternative (synonyms, full and short names) in accepted.
+  alternative (synonyms, full and short names) in accepted. Grading already forgives case,
+  spacing, punctuation, accents, a leading "the", British/American spelling and one typo in
+  longer answers, so don't list those variants. Set exact on code, formulas and answers where
+  punctuation or one letter changes the meaning (x[0], affect/effect).
 - Don't re-ask what the learner has already got right, in placement or earlier lessons, unless
   you're going back over a miss. Read the recent lessons with get_lesson before writing, the
   newest untaken one above all: its results aren't in yet.
