@@ -38,8 +38,9 @@ from pupil_server.agents.base import (
 from pupil_server.settings import pupil_home
 
 SERVER = "pupil"
-# An alias, which Claude Code resolves to the current Sonnet.
-DEFAULT_MODEL = "sonnet"
+# An alias, which Claude Code resolves to the current Opus. Sonnet is cheaper, but its
+# lessons had wrong answer keys and giveaways.
+DEFAULT_MODEL = "opus"
 MCP_PREFIX = f"mcp__{SERVER}__"
 WEB_TOOLS = {"WebSearch": "web_search", "WebFetch": "web_fetch"}
 

@@ -95,7 +95,7 @@ def test_options_isolate_the_agent(tmp_path: Path):
     assert plain.permission_mode == "dontAsk"
     assert plain.include_partial_messages  # translate() takes text only from stream deltas
 
-    assert plain.model == "sonnet"  # Pupil's default, not the user's Claude Code setting
+    assert plain.model == "opus"  # Pupil's default, not the user's Claude Code setting
 
     web = build_options(AgentConfig(system_prompt="p", web_search=True), tmp_path)
     assert set(web.tools) == {"WebSearch", "WebFetch"}
