@@ -94,6 +94,20 @@
   transform: translateX(-1.5rem);
 }
 
+/* A bubble pointing at where the learner is up to, bobbing to draw the eye. */
+@keyframes bob {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -4px);
+  }
+}
+.bob {
+  animation: bob 1.6s ease-in-out infinite;
+}
+
 /* Bottom bars clear a phone's home indicator. */
 .safe-bottom {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
