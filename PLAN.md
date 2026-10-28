@@ -1,25 +1,26 @@
 # Plan
 
-## Next: lesson quality
+## Next: a Duolingo-style UI
 
-Reviewing three runs on the same topic (Opus, Codex, Sonnet) found wrong answer keys and
-giveaways on Sonnet, abstract lessons on Codex, few teach cards anywhere, and typed answers
-marked wrong for small differences. Three branches, in order:
+Closer to Duolingo in look and feel, the path and the lesson, mobile-first. Pupil uses the
+design language (chunky 3D buttons, a bold rounded font, a winding path, celebratory
+feedback) but none of Duolingo's assets: no owl, font, brand colours or sounds. No mascot or
+gamification yet. Three branches, in order:
 
-**`lesson-quality`**
-- [x] Claude defaults to Opus.
-- [x] Runs search the web to check facts they aren't sure of, and to scope a topic before planning.
-- [x] Prompt guidance on writing questions, on placement finding the edge of what the learner knows, and on teach cards that motivate their idea.
-- [x] `create_lesson` refuses word banks without wrong words, and typed answers given away in the question.
+**`ui-foundation`**
+- [ ] Design tokens: Pupil's own bright palette, large radii, an off-white background, and the Nunito font bundled locally.
+- [ ] Shared components: 3D buttons, pressable choice tiles, a thick progress bar, and a small set of SVG icons.
+- [ ] Home and intake restyled, in a phone-width column centred on desktop.
 
-**`lenient-grading`**
-- [x] Typed answers forgive case, spacing, punctuation, hyphens, accents, a leading "the", British/American spelling, and one typo in answers of 6+ characters with no digits.
-- [x] An `exact` flag on a question keeps strict matching (only spacing, and case unless case-sensitive, are ignored), for code, formulas and answers where one letter changes the meaning.
-- [x] The prompt tells the agent about both.
+**`ui-path`**
+- [ ] The topic page as a winding path of round lesson nodes under coloured unit banners: done, current (with a START bubble), ready and locked.
+- [ ] Tapping a node shows its title and score with Start or Review; the path ends in a trophy that opens Go further.
+- [ ] Waiting and failed runs show at the current node.
 
-**`markdown-rendering`**
-- [x] The lesson player renders Markdown in question prompts, explanations and teach cards, safely (no raw HTML from the agent). Codex's source links, such as `[Book overview](https://…)`, now show as links.
-- [x] The prompt tells the agent what Markdown it can use, and where.
+**`ui-lesson`**
+- [ ] After Check, the tiles show the right and wrong answers.
+- [ ] Bold green and red feedback panels, motion between questions, a shake on a wrong answer, and short generated sounds with a mute toggle.
+- [ ] A lesson-complete screen with accuracy, time and questions, and the answers to review.
 
 ## Known issues
 
