@@ -9,6 +9,8 @@ import {
   type Topic,
 } from '../api/topics'
 import { nextUp, screen } from '../topicState'
+import Icon from './ui/Icon.vue'
+import PupilButton from './ui/PupilButton.vue'
 
 const props = defineProps<{ topicId: string }>()
 const emit = defineEmits<{ play: [lessonId: string]; close: [] }>()
@@ -82,33 +84,30 @@ const WAITING: Record<Job, string> = {
 function score(l: LessonSummary): string {
   return `${l.latest_correct} of ${l.questions}`
 }
-
-const buttonClass =
-  'rounded-xl bg-blue-600 px-6 py-3 text-lg font-semibold text-white hover:bg-blue-700 disabled:opacity-40'
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col">
-    <header class="flex items-center gap-4 px-4 py-4">
+  <div class="flex min-h-dvh flex-col">
+    <header class="flex items-center gap-3 px-4 py-4">
       <button
-        class="text-2xl text-gray-400 hover:text-gray-700"
+        class="flex size-11 items-center justify-center rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700"
         aria-label="All topics"
         @click="emit('close')"
       >
-        ←
+        <Icon name="back" />
       </button>
       <h1 class="truncate text-xl font-bold">{{ topic?.request }}</h1>
     </header>
 
-    <main class="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-6">
-      <p v-if="!topic && error" class="text-red-600">{{ error }}</p>
-      <p v-else-if="!topic" class="text-gray-500">Loading…</p>
+    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
+      <p v-if="!topic && error" class="text-coral-600">{{ error }}</p>
+      <p v-else-if="!topic" class="text-ink-500">Loading…</p>
 
       <!-- Before the plan: placement, or waiting for the plan -->
       <template v-else-if="current === 'start'">
         <template v-if="next?.kind === 'ready'">
           <h2 class="text-2xl font-bold">Let's see what you already know</h2>
-          <p class="text-lg text-gray-700">
+          <p class="text-lg text-ink-700">
             A few questions, from easy to hard. When you don't know one, tap
             <strong>I don't know</strong> rather than guessing, so your plan starts in the right
             place.
@@ -116,34 +115,34 @@ const buttonClass =
         </template>
         <template v-else-if="placement">
           <h2 class="text-2xl font-bold">Thanks!</h2>
-          <p class="text-lg text-gray-700">
+          <p class="text-lg text-ink-700">
             You got {{ score(placement) }} right. Your plan is built from that.
           </p>
         </template>
         <template v-else-if="topic.profile.level === 'new'">
           <h2 class="text-2xl font-bold">Starting from the beginning</h2>
-          <p class="text-lg text-gray-700">Your plan is built from your answers.</p>
+          <p class="text-lg text-ink-700">Your plan is built from your answers.</p>
         </template>
       </template>
 
       <!-- The plan, shown back until the first lesson is taken -->
       <template v-else-if="current === 'plan' && topic.syllabus">
-        <p class="text-sm font-semibold tracking-wide text-blue-600 uppercase">Your plan</p>
+        <p class="text-sm font-semibold tracking-wide text-lake-600 uppercase">Your plan</p>
         <h2 class="text-2xl font-bold">{{ topic.syllabus.goal }}</h2>
-        <p v-if="topic.syllabus.rationale" class="text-lg text-gray-700">
+        <p v-if="topic.syllabus.rationale" class="text-lg text-ink-700">
           {{ topic.syllabus.rationale }}
         </p>
         <ol class="flex flex-col gap-2">
           <li
             v-for="(unit, i) in topic.path"
             :key="unit.unit_id"
-            class="flex gap-3 rounded-xl border-2 border-gray-100 px-4 py-3"
+            class="flex gap-3 rounded-2xl border-2 border-ink-100 px-4 py-3"
           >
-            <span class="font-bold text-gray-400">{{ i + 1 }}</span>
+            <span class="font-bold text-ink-400">{{ i + 1 }}</span>
             <span class="flex flex-col">
               <span class="font-semibold">{{ unit.title }}</span>
-              <span class="text-gray-600">{{ unit.summary }}</span>
-              <span class="text-sm text-gray-400">
+              <span class="text-ink-600">{{ unit.summary }}</span>
+              <span class="text-sm text-ink-400">
                 {{ unit.stops }} {{ unit.stops === 1 ? 'lesson' : 'lessons' }}
               </span>
             </span>
@@ -155,7 +154,7 @@ const buttonClass =
       <template v-else-if="topic.syllabus">
         <div
           v-if="current === 'finished'"
-          class="flex flex-col gap-3 rounded-xl border-2 border-green-200 bg-green-50 p-5"
+          class="flex flex-col gap-3 rounded-2xl border-2 border-leaf-200 bg-leaf-50 p-5"
         >
           <h2 class="text-2xl font-bold">You've finished {{ topic.request }}!</h2>
           <p class="text-lg">
@@ -163,21 +162,17 @@ const buttonClass =
             <strong>{{ takenCorrect }} of {{ takenQuestions }}</strong> questions right.
           </p>
           <template v-if="next?.kind === 'done'">
-            <p class="text-gray-700">
+            <p class="text-ink-700">
               Want to keep going? Pupil can add units that go deeper, picking up from here.
             </p>
-            <button
-              :disabled="busy"
-              :class="[buttonClass, 'self-start']"
-              @click="ask(extendTopic)"
-            >
+            <PupilButton :disabled="busy" class="self-start" @click="ask(extendTopic)">
               Go further
-            </button>
+            </PupilButton>
           </template>
         </div>
         <div>
           <h2 class="text-2xl font-bold">{{ topic.syllabus.goal }}</h2>
-          <p v-if="topic.syllabus.rationale" class="text-gray-600">
+          <p v-if="topic.syllabus.rationale" class="text-ink-600">
             {{ topic.syllabus.rationale }}
           </p>
         </div>
@@ -186,14 +181,14 @@ const buttonClass =
             v-for="unit in topic.path"
             :key="unit.unit_id"
             :class="[
-              'rounded-xl border-2 px-4 py-3',
-              unit.lesson_ids.length ? 'border-gray-200' : 'border-dashed border-gray-200',
+              'rounded-2xl border-2 px-4 py-3',
+              unit.lesson_ids.length ? 'border-ink-200' : 'border-dashed border-ink-200',
             ]"
           >
-            <p :class="['font-semibold', unit.lesson_ids.length ? '' : 'text-gray-400']">
+            <p :class="['font-semibold', unit.lesson_ids.length ? '' : 'text-ink-400']">
               {{ unit.title }}
             </p>
-            <p :class="['text-sm', unit.lesson_ids.length ? 'text-gray-600' : 'text-gray-400']">
+            <p :class="['text-sm', unit.lesson_ids.length ? 'text-ink-600' : 'text-ink-400']">
               {{ unit.summary }}
             </p>
             <div class="mt-3 flex flex-wrap gap-2">
@@ -203,15 +198,15 @@ const buttonClass =
                   :class="[
                     'rounded-full border-2 px-4 py-1.5 text-left',
                     id === topic.next_lesson_id
-                      ? 'border-blue-500 bg-blue-50 font-semibold'
-                      : 'border-green-200 bg-green-50',
+                      ? 'border-lake-500 bg-lake-50 font-semibold'
+                      : 'border-leaf-200 bg-leaf-50',
                   ]"
                   :title="id === topic.next_lesson_id ? 'Start' : 'Take it again'"
                   @click="emit('play', id)"
                 >
-                  <span v-if="lessons.get(id)!.attempts" class="text-green-600">✓</span>
+                  <span v-if="lessons.get(id)!.attempts" class="text-leaf-600">✓</span>
                   {{ lessons.get(id)!.title }}
-                  <span v-if="lessons.get(id)!.attempts" class="text-sm text-gray-500">
+                  <span v-if="lessons.get(id)!.attempts" class="text-sm text-ink-500">
                     {{ score(lessons.get(id)!) }}
                   </span>
                 </button>
@@ -220,7 +215,7 @@ const buttonClass =
               <span
                 v-for="k in unit.stops - unit.lesson_ids.length"
                 :key="`stop-${k}`"
-                class="rounded-full border-2 border-dashed border-gray-200 px-4 py-1.5 text-gray-400"
+                class="rounded-full border-2 border-dashed border-ink-200 px-4 py-1.5 text-ink-400"
               >
                 Lesson {{ unit.lesson_ids.length + k }}
               </span>
@@ -233,27 +228,25 @@ const buttonClass =
     <!-- What's next: start it, wait for it, or ask for it again -->
     <footer
       v-if="topic && next && next.kind !== 'done'"
-      class="sticky bottom-0 border-t-2 border-gray-100 bg-white px-4 py-5"
+      class="safe-bottom sticky bottom-0 border-t-2 border-ink-200 bg-ink-50 px-4 pt-5"
     >
-      <div class="mx-auto flex max-w-xl items-center justify-end gap-3">
+      <div class="mx-auto flex max-w-md flex-col gap-3">
         <template v-if="next.kind === 'ready'">
-          <p v-if="current === 'path' && nextLesson" class="flex-1 truncate font-medium">
+          <p v-if="current === 'path' && nextLesson" class="truncate text-ink-600">
             Next: {{ nextLesson.title }}
           </p>
-          <button :class="buttonClass" @click="emit('play', next.lessonId)">
+          <PupilButton block @click="emit('play', next.lessonId)">
             {{ current === 'plan' ? 'Start your first lesson' : 'Start' }}
-          </button>
+          </PupilButton>
         </template>
-        <p v-else-if="next.kind === 'waiting'" class="flex-1 animate-pulse text-gray-600">
+        <p v-else-if="next.kind === 'waiting'" class="animate-pulse py-3 text-center text-ink-600">
           {{ WAITING[next.job] }}
         </p>
         <template v-else>
-          <p class="flex-1 text-red-600">
+          <p class="text-coral-600">
             Something went wrong preparing this<span v-if="next.error">: {{ next.error }}</span>
           </p>
-          <button :disabled="busy" :class="buttonClass" @click="ask(prepareTopic)">
-            Try again
-          </button>
+          <PupilButton block :disabled="busy" @click="ask(prepareTopic)">Try again</PupilButton>
         </template>
       </div>
     </footer>

@@ -28,7 +28,7 @@ watch(typed, (value) => {
       :class="inputClass"
       autofocus
     />
-    <span v-if="question.kind === 'numeric' && question.unit" class="text-lg text-gray-600">
+    <span v-if="question.kind === 'numeric' && question.unit" class="text-lg text-ink-600">
       {{ question.unit }}
     </span>
   </div>

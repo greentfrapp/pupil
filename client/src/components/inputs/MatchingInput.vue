@@ -54,7 +54,7 @@ function rightBadge(rightId: string): number | null {
 
 <template>
   <div class="flex flex-col gap-3">
-    <p class="text-sm text-gray-500">Tap an item on the left, then its match on the right.</p>
+    <p class="text-sm text-ink-500">Tap an item on the left, then its match on the right.</p>
     <div class="grid grid-cols-2 gap-2">
       <div class="flex flex-col gap-2">
         <button
@@ -64,7 +64,7 @@ function rightBadge(rightId: string): number | null {
           :class="[tileClass(selected === p.id), 'text-left']"
           @click="pickLeft(p.id)"
         >
-          <span v-if="badge(p.id)" class="mr-2 font-semibold text-blue-600">{{ badge(p.id) }}</span>
+          <span v-if="badge(p.id)" class="mr-2 font-semibold text-lake-600">{{ badge(p.id) }}</span>
           {{ p.left }}
         </button>
       </div>
@@ -76,7 +76,7 @@ function rightBadge(rightId: string): number | null {
           :class="[tileClass(), 'text-left']"
           @click="pickRight(p.id)"
         >
-          <span v-if="rightBadge(p.id)" class="mr-2 font-semibold text-blue-600">
+          <span v-if="rightBadge(p.id)" class="mr-2 font-semibold text-lake-600">
             {{ rightBadge(p.id) }}
           </span>
           {{ p.right }}

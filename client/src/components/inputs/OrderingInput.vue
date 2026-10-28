@@ -25,15 +25,15 @@ const text = (id: string) => pool.find((o) => o.id === id)?.text
 
 <template>
   <div class="flex flex-col gap-4">
-    <p class="text-sm text-gray-500">Tap the items in order. Tap one again to take it back.</p>
-    <ol class="flex min-h-14 flex-col gap-2 rounded-xl border-2 border-dashed border-gray-200 p-2">
+    <p class="text-sm text-ink-500">Tap the items in order. Tap one again to take it back.</p>
+    <ol class="flex min-h-14 flex-col gap-2 rounded-xl border-2 border-dashed border-ink-200 p-2">
       <li v-for="(id, i) in placed" :key="id">
         <button
           :disabled="disabled"
           :class="[tileClass(true), 'w-full text-left']"
           @click="toggle(id)"
         >
-          <span class="mr-2 text-gray-400">{{ i + 1 }}.</span>{{ text(id) }}
+          <span class="mr-2 text-ink-400">{{ i + 1 }}.</span>{{ text(id) }}
         </button>
       </li>
     </ol>

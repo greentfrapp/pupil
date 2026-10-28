@@ -18,6 +18,9 @@ import MatchingInput from './inputs/MatchingInput.vue'
 import OrderingInput from './inputs/OrderingInput.vue'
 import TrueFalseInput from './inputs/TrueFalseInput.vue'
 import TypedInput from './inputs/TypedInput.vue'
+import Icon from './ui/Icon.vue'
+import ProgressBar from './ui/ProgressBar.vue'
+import PupilButton from './ui/PupilButton.vue'
 
 const props = defineProps<{ lessonId: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -173,36 +176,27 @@ const results = computed(() => {
 })
 
 const footerStyle = computed(() => {
-  if (!feedback.value) return 'border-gray-100'
-  return feedback.value.correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+  if (!feedback.value) return 'border-ink-200'
+  return feedback.value.correct ? 'border-leaf-200 bg-leaf-50' : 'border-coral-200 bg-coral-50'
 })
-const secondaryClass =
-  'rounded-xl border-2 border-gray-200 px-6 py-3 text-lg font-semibold hover:bg-gray-50 disabled:opacity-40'
-const buttonClass =
-  'rounded-xl px-6 py-3 text-lg font-semibold text-white disabled:opacity-40 bg-blue-600 hover:bg-blue-700'
 </script>
 
 <template>
   <div class="fixed inset-0 z-10 flex flex-col bg-white" @keydown.enter.prevent="onEnter">
-    <header class="flex items-center gap-4 px-4 py-4">
+    <header class="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-4">
       <button
-        class="text-2xl text-gray-400 hover:text-gray-700"
+        class="flex size-11 items-center justify-center rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700"
         aria-label="Quit the lesson"
         @click="emit('close')"
       >
-        ✕
+        <Icon name="close" />
       </button>
-      <div class="h-3 flex-1 overflow-hidden rounded-full bg-gray-200">
-        <div
-          class="h-full rounded-full bg-green-500 transition-all"
-          :style="{ width: `${progress}%` }"
-        />
-      </div>
+      <ProgressBar :percent="progress" />
     </header>
 
-    <main class="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 overflow-y-auto px-4 py-6">
-      <p v-if="!lesson && error" class="text-red-600">{{ error }}</p>
-      <p v-else-if="!lesson" class="text-gray-500">Loading…</p>
+    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 overflow-y-auto px-4 py-6">
+      <p v-if="!lesson && error" class="text-coral-600">{{ error }}</p>
+      <p v-else-if="!lesson" class="text-ink-500">Loading…</p>
 
       <!-- A placement lesson that has already been taken -->
       <template v-else-if="taken">
@@ -227,15 +221,15 @@ const buttonClass =
           <li
             v-for="r in results"
             :key="r.id"
-            class="rounded-xl border-2 border-gray-100 px-4 py-3"
+            class="rounded-xl border-2 border-ink-100 px-4 py-3"
           >
             <p class="font-medium">
-              <span :class="r.correct ? 'text-green-600' : 'text-red-600'">
+              <span :class="r.correct ? 'text-leaf-600' : 'text-coral-600'">
                 {{ r.correct ? '✓' : '✗' }}
               </span>
               <span class="markdown-inline" v-html="renderInline(r.prompt)" />
             </p>
-            <p v-if="!r.correct" class="text-sm text-gray-600">
+            <p v-if="!r.correct" class="text-sm text-ink-600">
               <template v-if="r.given">You said {{ r.given }}; </template>
               <template v-else>You didn't know; </template>
               the answer is {{ r.answer }}.
@@ -246,7 +240,7 @@ const buttonClass =
 
       <!-- A teach card -->
       <template v-else-if="item && item.kind === 'teach_card'">
-        <p class="text-sm font-semibold tracking-wide text-blue-600 uppercase">New idea</p>
+        <p class="text-sm font-semibold tracking-wide text-lake-600 uppercase">New idea</p>
         <h2 class="text-2xl font-bold">{{ item.title }}</h2>
         <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />
       </template>
@@ -302,49 +296,61 @@ const buttonClass =
 
     <footer
       v-if="lesson && !taken"
-      :class="['border-t-2 px-4 py-5', footerStyle]"
+      :class="['safe-bottom border-t-2 px-4 pt-5', footerStyle]"
     >
-      <div class="mx-auto flex max-w-xl flex-col gap-3">
+      <div class="mx-auto flex max-w-md flex-col gap-3">
         <div v-if="feedback">
-          <p :class="['text-xl font-bold', feedback.correct ? 'text-green-700' : 'text-red-700']">
+          <p :class="['text-xl font-bold', feedback.correct ? 'text-leaf-700' : 'text-coral-700']">
             {{ feedback.title }}
           </p>
           <p v-if="!feedback.correct" class="font-medium">Answer: {{ feedback.answer }}</p>
-          <div class="markdown text-gray-700" v-html="renderMarkdown(feedback.explanation)" />
+          <div class="markdown text-ink-700" v-html="renderMarkdown(feedback.explanation)" />
         </div>
         <template v-if="finished">
-          <p v-if="busy" class="text-gray-500">Saving…</p>
-          <p v-else-if="saveProblem" class="text-red-600">{{ saveProblem.message }}</p>
-          <div class="flex justify-end gap-2">
-            <button
+          <p v-if="busy" class="text-ink-500">Saving…</p>
+          <p v-else-if="saveProblem" class="text-coral-600">{{ saveProblem.message }}</p>
+          <div class="flex flex-col gap-3">
+            <!-- Not while saving: the topic would still show this lesson as the next one -->
+            <PupilButton block :disabled="busy" @click="emit('close')">Continue</PupilButton>
+            <PupilButton
               v-if="saveProblem?.canRetry"
+              variant="secondary"
+              block
               :disabled="busy"
-              :class="secondaryClass"
               @click="save"
             >
               Try saving again
-            </button>
-            <button
+            </PupilButton>
+            <PupilButton
               v-if="lesson.purpose === 'lesson'"
+              variant="secondary"
+              block
               :disabled="busy"
-              :class="secondaryClass"
               @click="load"
             >
               Retry lesson
-            </button>
-            <!-- Not while saving: the topic would still show this lesson as the next one -->
-            <button :disabled="busy" :class="buttonClass" @click="emit('close')">Continue</button>
+            </PupilButton>
           </div>
         </template>
-        <div v-else-if="question && !feedback" class="flex justify-end gap-2">
-          <button v-if="lesson.purpose === 'placement'" :class="secondaryClass" @click="dontKnow">
+        <div v-else-if="question && !feedback" class="flex gap-3">
+          <PupilButton
+            v-if="lesson.purpose === 'placement'"
+            variant="secondary"
+            class="flex-1"
+            @click="dontKnow"
+          >
             I don't know
-          </button>
-          <button :disabled="!response" :class="buttonClass" @click="check">Check</button>
+          </PupilButton>
+          <PupilButton :disabled="!response" class="flex-1" @click="check">Check</PupilButton>
         </div>
-        <button v-else :class="[buttonClass, 'self-end']" @click="next">
+        <PupilButton
+          v-else
+          block
+          :variant="feedback && !feedback.correct ? 'danger' : 'primary'"
+          @click="next"
+        >
           {{ isLast ? 'Finish' : 'Continue' }}
-        </button>
+        </PupilButton>
       </div>
     </footer>
   </div>

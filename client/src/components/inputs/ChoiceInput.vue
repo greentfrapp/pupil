@@ -19,7 +19,7 @@ function toggle(optionId: string) {
 
 <template>
   <div class="flex flex-col gap-2">
-    <p v-if="question.multiple" class="text-sm text-gray-500">Pick every correct answer.</p>
+    <p v-if="question.multiple" class="text-sm text-ink-500">Pick every correct answer.</p>
     <button
       v-for="o in question.options"
       :key="o.id"

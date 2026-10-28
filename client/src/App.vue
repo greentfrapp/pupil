@@ -26,7 +26,7 @@ function closeLesson() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-white font-sans text-gray-900">
+  <div class="min-h-dvh">
     <HomeScreen
       v-if="view.name === 'home'"
       @learn="view = { name: 'intake' }"

@@ -47,7 +47,7 @@ function clear(blank: number) {
           <button
             v-if="question.word_bank"
             :disabled="disabled || placed[i] === null"
-            class="mx-1 inline-block min-w-16 rounded-lg border-b-2 border-gray-400 px-2 align-baseline"
+            class="mx-1 inline-block min-w-16 rounded-lg border-b-2 border-ink-400 px-2 align-baseline"
             @click="clear(i)"
           >
             {{ placed[i] === null ? ' ' : tiles[placed[i]] }}
@@ -56,7 +56,7 @@ function clear(blank: number) {
             v-else
             v-model="typed[i]"
             :disabled="disabled"
-            class="mx-1 w-28 rounded-lg border-2 border-gray-200 px-2 align-baseline focus:border-blue-500 focus:outline-none"
+            class="mx-1 w-28 rounded-lg border-2 border-ink-200 px-2 align-baseline focus:border-lake-500 focus:outline-none"
             @input="update"
           />
         </template>

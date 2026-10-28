@@ -1,4 +1,113 @@
 @import "tailwindcss";
+@import "@fontsource-variable/nunito";
+
+/* Pupil's own palette and type. Static, so every shade is a CSS variable that components can
+   use, e.g. for a button's darker bottom edge. */
+@theme static {
+  --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
+
+  /* Greys, warm. */
+  --color-ink-50: #f7f7f4;
+  --color-ink-100: #efeee9;
+  --color-ink-200: #e3e2dd;
+  --color-ink-300: #cfcec8;
+  --color-ink-400: #a9a8a1;
+  --color-ink-500: #7d7c75;
+  --color-ink-600: #5f5e58;
+  --color-ink-700: #4a4944;
+  --color-ink-800: #34332f;
+  --color-ink-900: #262522;
+
+  /* Green: go, done and right. */
+  --color-leaf-50: #f0fbe9;
+  --color-leaf-100: #dcf5cc;
+  --color-leaf-200: #bdeba0;
+  --color-leaf-300: #93dc69;
+  --color-leaf-400: #6dcb3f;
+  --color-leaf-500: #4cb52a;
+  --color-leaf-600: #3d9a1f;
+  --color-leaf-700: #317d1a;
+  --color-leaf-800: #2a6219;
+  --color-leaf-900: #234f17;
+
+  /* Blue: picked, and links. */
+  --color-lake-50: #eaf7fe;
+  --color-lake-100: #d0eefd;
+  --color-lake-200: #a6defb;
+  --color-lake-300: #6cc8f7;
+  --color-lake-400: #34afef;
+  --color-lake-500: #1496dc;
+  --color-lake-600: #0b7abb;
+  --color-lake-700: #0c6297;
+  --color-lake-800: #10527c;
+  --color-lake-900: #134567;
+
+  /* Red: wrong, and problems. */
+  --color-coral-50: #fff1f0;
+  --color-coral-100: #ffdedb;
+  --color-coral-200: #ffc1bb;
+  --color-coral-300: #ff968c;
+  --color-coral-400: #fb6a5c;
+  --color-coral-500: #ee4b3c;
+  --color-coral-600: #d63526;
+  --color-coral-700: #b2291c;
+  --color-coral-800: #93251b;
+  --color-coral-900: #79241c;
+
+  /* Yellow: gold, finished. */
+  --color-sun-50: #fffae6;
+  --color-sun-100: #fff1bf;
+  --color-sun-200: #ffe48a;
+  --color-sun-300: #ffd44d;
+  --color-sun-400: #ffc41f;
+  --color-sun-500: #f5a800;
+  --color-sun-600: #d98500;
+  --color-sun-700: #b46000;
+  --color-sun-800: #924a05;
+  --color-sun-900: #783d08;
+}
+
+@layer base {
+  body {
+    @apply bg-ink-50 font-sans font-semibold text-ink-800 antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-extrabold;
+  }
+}
+
+/* Moving from one screen or step to the next. */
+.slide-enter-active,
+.slide-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+.slide-enter-from {
+  opacity: 0;
+  transform: translateX(1.5rem);
+}
+.slide-leave-to {
+  opacity: 0;
+  transform: translateX(-1.5rem);
+}
+
+/* Bottom bars clear a phone's home indicator. */
+.safe-bottom {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* Lesson text the agent wrote in Markdown (see markdown.ts). */
 .markdown > * + * {
@@ -6,11 +115,11 @@
 }
 .markdown a,
 .markdown-inline a {
-  @apply text-blue-600 underline hover:text-blue-800;
+  @apply text-lake-600 underline hover:text-lake-800;
 }
 .markdown code,
 .markdown-inline code {
-  @apply rounded bg-gray-100 px-1 text-[0.9em];
+  @apply rounded bg-ink-100 px-1 text-[0.9em];
 }
 .markdown ul {
   @apply list-disc pl-6;
