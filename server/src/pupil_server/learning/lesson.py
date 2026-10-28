@@ -327,7 +327,8 @@ class TeachCard(BaseModel):
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     text: str = Field(min_length=1)
-    """A few sentences introducing a brand-new idea that the questions after it build on."""
+    """2 to 4 sentences that motivate a new idea, saying why it's needed and connecting it to
+    what the learner already knows. The questions after it build on it."""
 
 
 Item = Annotated[AnyQuestion | TeachCard, Field(discriminator="kind")]
