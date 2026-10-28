@@ -4,7 +4,7 @@
 
 Reviewing three runs on the same topic (Opus, Codex, Sonnet) found wrong answer keys and
 giveaways on Sonnet, abstract lessons on Codex, few teach cards anywhere, and typed answers
-marked wrong for small differences. Two branches, in order:
+marked wrong for small differences. Three branches, in order:
 
 **`lesson-quality`**
 - [x] Claude defaults to Opus.
@@ -16,6 +16,10 @@ marked wrong for small differences. Two branches, in order:
 - [ ] Typed answers forgive case, spacing, punctuation, hyphens, accents, a leading "the", British/American spelling, and one typo in answers of 6+ characters with no digits.
 - [ ] An `exact` flag on a question turns typo and spelling forgiveness off.
 - [ ] The prompt tells the agent about both.
+
+**`markdown-rendering`**
+- [ ] The lesson player renders Markdown in question prompts, explanations and teach cards, safely (no raw HTML from the agent). Codex already writes source links, such as `[Book overview](https://…)`, which show as raw text until then.
+- [ ] The prompt tells the agent what Markdown it can use, and where.
 
 ## Known issues
 
