@@ -190,6 +190,11 @@ class TextMatch(QuestionBase):
     """Every answer that counts as right, the best one first: it is the one shown to the
     learner. Spacing, and case unless case_sensitive, are ignored."""
     case_sensitive: bool = False
+    exact: bool = False
+    """Set for code, formulas, and answers where punctuation or one letter changes the meaning
+    (x[0], affect/effect). Otherwise grading also forgives punctuation, accents, a leading
+    "the", British/American spelling, and one typo in an answer of 6+ characters with no
+    digits."""
 
     @model_validator(mode="after")
     def _check_accepted(self) -> TextMatch:
@@ -225,6 +230,11 @@ class FillBlank(QuestionBase):
     each used at most once. Leave out to have the learner type."""
     case_sensitive: bool = False
     """Spacing is always ignored; case is too, unless this is set."""
+    exact: bool = False
+    """Set for code, formulas, and answers where punctuation or one letter changes the meaning
+    (x[0], affect/effect). Otherwise grading also forgives punctuation, accents, a leading
+    "the", British/American spelling, and one typo in an answer of 6+ characters with no
+    digits."""
 
     @model_validator(mode="after")
     def _check_blanks(self) -> FillBlank:

@@ -41,6 +41,8 @@ export interface TextMatch extends QuestionBase {
   kind: 'text_match'
   accepted: string[]
   case_sensitive: boolean
+  /** Grade strictly: only spacing, and case unless case_sensitive, are ignored. */
+  exact: boolean
 }
 
 export interface FillBlank extends QuestionBase {
@@ -51,6 +53,8 @@ export interface FillBlank extends QuestionBase {
   /** Words to pick from instead of typing, each used at most once. */
   word_bank: string[] | null
   case_sensitive: boolean
+  /** Grade strictly: only spacing, and case unless case_sensitive, are ignored. */
+  exact: boolean
 }
 
 export interface Ordering extends QuestionBase {

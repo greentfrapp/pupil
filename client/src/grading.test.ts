@@ -32,8 +32,15 @@ function numeric(answer: number, tolerance = 0, unit: string | null = null): Num
   return { ...basics, kind: 'numeric', id: 'q', answer, tolerance, unit }
 }
 
-function textMatch(accepted: string[], caseSensitive = false): TextMatch {
-  return { ...basics, kind: 'text_match', id: 'q', accepted, case_sensitive: caseSensitive }
+function textMatch(accepted: string[], caseSensitive = false, exact = false): TextMatch {
+  return {
+    ...basics,
+    kind: 'text_match',
+    id: 'q',
+    accepted,
+    case_sensitive: caseSensitive,
+    exact,
+  }
 }
 
 function fillBlank(text: string, answers: string[][], caseSensitive = false): FillBlank {
@@ -45,6 +52,7 @@ function fillBlank(text: string, answers: string[][], caseSensitive = false): Fi
     blanks: answers.map((accepted) => ({ accepted })),
     word_bank: null,
     case_sensitive: caseSensitive,
+    exact: false,
   }
 }
 
@@ -111,6 +119,53 @@ describe('grade', () => {
   it('keeps case when the question is case sensitive', () => {
     expect(grade(textMatch(['None'], true), text(' None'))).toBe(true)
     expect(grade(textMatch(['None'], true), text('none'))).toBe(false)
+  })
+
+  it('ignores punctuation, accents and a leading article', () => {
+    expect(grade(textMatch(['Cut-Me-Own-Throat']), text('cut me own throat'))).toBe(true)
+    expect(grade(textMatch(["Great T'Phon"]), text('Great TPhon'))).toBe(true)
+    expect(grade(textMatch(['Überwald']), text('Uberwald'))).toBe(true)
+    expect(grade(textMatch(['the goblins']), text('Goblins'))).toBe(true)
+    expect(grade(textMatch(['goblins']), text('the goblins.'))).toBe(true)
+  })
+
+  it('takes British and American spellings as the same', () => {
+    const pairs = [
+      ['colour', 'color'],
+      ['centre', 'center'],
+      ['organised', 'organized'],
+      ['analyse', 'analyze'],
+      ['defence', 'defense'],
+      ['catalogue', 'catalog'],
+      ['encyclopaedia', 'encyclopedia'],
+      ['travelled', 'traveled'],
+      ['honour guard', 'honor guard'],
+    ]
+    for (const [british, american] of pairs) {
+      expect(grade(textMatch([british]), text(american))).toBe(true)
+      expect(grade(textMatch([american]), text(british))).toBe(true)
+    }
+  })
+
+  it('forgives one typo in an answer of six or more characters', () => {
+    expect(grade(textMatch(['orangutan']), text('orangatan'))).toBe(true) // substitution
+    expect(grade(textMatch(['Ysabell']), text('Ysabel'))).toBe(true) // deletion
+    expect(grade(textMatch(['Isabell']), text('Isabelle'))).toBe(true) // insertion
+    expect(grade(textMatch(['Vetinari']), text('Vetianri'))).toBe(true) // swap
+    expect(grade(textMatch(['orangutan']), text('orangatang'))).toBe(false) // two typos
+  })
+
+  it('wants short answers and answers with digits exactly', () => {
+    expect(grade(textMatch(['Greebo']), text('Greebo'))).toBe(true)
+    expect(grade(textMatch(['Krull']), text('Krill'))).toBe(false) // five letters
+    expect(grade(textMatch(['1989 AD']), text('1988 AD'))).toBe(false)
+  })
+
+  it('forgives only spacing, and case unless case sensitive, when exact', () => {
+    expect(grade(textMatch(['affect'], false, true), text('effect'))).toBe(false)
+    expect(grade(textMatch(['x[0]'], false, true), text('x0'))).toBe(false)
+    expect(grade(textMatch(['colour'], false, true), text('color'))).toBe(false)
+    expect(grade(textMatch(['x[0]'], false, true), text(' X[0] '))).toBe(true)
   })
 
   it('refuses a response of the wrong kind', () => {
