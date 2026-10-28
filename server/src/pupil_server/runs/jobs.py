@@ -105,7 +105,8 @@ INSTRUCTIONS: dict[Job, str] = {
         "syllabus_id), so the results show where the learner's knowledge runs out: 10 to 15 "
         "questions from easy to hard, across the topic. If they know the basics, run from the "
         "basics to intermediate; if they know it well, from intermediate up. One fact per "
-        "question."
+        "question. The learner waits while you write this one, so keep it quick: search only "
+        "for a fact you're truly unsure of, and leave out a question rather than research it."
     ),
     "plan": (
         "Before planning, search to scope the topic: its core ideas, the usual order to "
