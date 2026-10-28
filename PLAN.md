@@ -18,8 +18,8 @@ marked wrong for small differences. Three branches, in order:
 - [x] The prompt tells the agent about both.
 
 **`markdown-rendering`**
-- [ ] The lesson player renders Markdown in question prompts, explanations and teach cards, safely (no raw HTML from the agent). Codex already writes source links, such as `[Book overview](https://…)`, which show as raw text until then.
-- [ ] The prompt tells the agent what Markdown it can use, and where.
+- [x] The lesson player renders Markdown in question prompts, explanations and teach cards, safely (no raw HTML from the agent). Codex's source links, such as `[Book overview](https://…)`, now show as links.
+- [x] The prompt tells the agent what Markdown it can use, and where.
 
 ## Known issues
 
