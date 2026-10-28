@@ -50,13 +50,17 @@ const item = computed(() => lesson.value?.items[index.value])
 const question = computed(() =>
   item.value && item.value.kind !== 'teach_card' ? item.value : null,
 )
+// A little variety in what a right answer hears.
+const PRAISE = ['Nice!', 'Great job!', 'Spot on!', 'Correct!', 'You got it!', 'Excellent!']
+const praise = ref(PRAISE[0])
+
 /** How the learner did on the current question, once they've checked their answer. */
 const feedback = computed(() => {
   const q = question.value
   const answer = q && answers.value[q.id]
   if (finished.value || !q || !answer) return null
   const title = answer.correct
-    ? 'Correct!'
+    ? praise.value
     : answer.response
       ? 'Not quite'
       : "Here's the answer" // the learner said they didn't know
@@ -109,6 +113,7 @@ function check() {
   const q = question.value
   const r = response.value
   if (!q || !r || feedback.value) return
+  praise.value = PRAISE[Math.floor(Math.random() * PRAISE.length)]
   answers.value[q.id] = { response: r, correct: grade(q, r) }
 }
 
@@ -182,8 +187,8 @@ const results = computed(() => {
 })
 
 const footerStyle = computed(() => {
-  if (!feedback.value) return 'border-ink-200'
-  return feedback.value.correct ? 'border-leaf-200 bg-leaf-50' : 'border-coral-200 bg-coral-50'
+  if (!feedback.value) return 'border-t-2 border-ink-200'
+  return feedback.value.correct ? 'rise bg-leaf-100' : 'rise bg-coral-100'
 })
 </script>
 
@@ -200,123 +205,158 @@ const footerStyle = computed(() => {
       <ProgressBar :percent="progress" />
     </header>
 
-    <main class="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 overflow-y-auto px-4 py-6">
-      <p v-if="!lesson && error" class="text-coral-600">{{ error }}</p>
-      <p v-else-if="!lesson" class="text-ink-500">Loading…</p>
+    <main class="flex-1 overflow-x-hidden overflow-y-auto">
+      <!-- Each item slides in as the last slides out -->
+      <Transition name="slide" mode="out-in">
+        <div
+          :key="`${run}-${finished ? 'end' : index}`"
+          class="mx-auto flex w-full max-w-md flex-col gap-5 px-4 py-6"
+        >
+          <p v-if="!lesson && error" class="text-coral-600">{{ error }}</p>
+          <p v-else-if="!lesson" class="text-ink-500">Loading…</p>
 
-      <!-- A placement lesson that has already been taken -->
-      <template v-else-if="taken">
-        <h2 class="text-2xl font-extrabold">{{ lesson.title }}</h2>
-        <p class="text-lg">
-          You've already taken this placement and got
-          <strong>{{ attempts[0].correct }} of {{ attempts[0].total }}</strong> right.
-        </p>
-      </template>
-
-      <!-- Results, once the lesson is finished -->
-      <template v-else-if="finished">
-        <h2 class="text-2xl font-extrabold">
-          {{ lesson.purpose === 'placement' ? 'Placement done!' : 'Lesson complete!' }}
-        </h2>
-        <p class="text-lg">
-          You got
-          <strong>{{ results.filter((r) => r.correct).length }} of {{ results.length }}</strong>
-          right<span v-if="saved && saved.number > 1"> on attempt {{ saved.number }}</span>.
-        </p>
-        <ol class="flex flex-col gap-2">
-          <li
-            v-for="r in results"
-            :key="r.id"
-            class="rounded-xl border-2 border-ink-100 px-4 py-3"
-          >
-            <p class="font-medium">
-              <span :class="r.correct ? 'text-leaf-600' : 'text-coral-600'">
-                {{ r.correct ? '✓' : '✗' }}
-              </span>
-              <span class="markdown-inline" v-html="renderInline(r.prompt)" />
+          <!-- A placement lesson that has already been taken -->
+          <template v-else-if="taken">
+            <h2 class="text-2xl font-extrabold">{{ lesson.title }}</h2>
+            <p class="text-lg">
+              You've already taken this placement and got
+              <strong>{{ attempts[0].correct }} of {{ attempts[0].total }}</strong> right.
             </p>
-            <p v-if="!r.correct" class="text-sm text-ink-600">
-              <template v-if="r.given">You said {{ r.given }}; </template>
-              <template v-else>You didn't know; </template>
-              the answer is {{ r.answer }}.
+          </template>
+
+          <!-- Results, once the lesson is finished -->
+          <template v-else-if="finished">
+            <h2 class="text-2xl font-extrabold">
+              {{ lesson.purpose === 'placement' ? 'Placement done!' : 'Lesson complete!' }}
+            </h2>
+            <p class="text-lg">
+              You got
+              <strong>{{ results.filter((r) => r.correct).length }} of {{ results.length }}</strong>
+              right<span v-if="saved && saved.number > 1"> on attempt {{ saved.number }}</span>.
             </p>
-          </li>
-        </ol>
-      </template>
+            <ol class="flex flex-col gap-2">
+              <li
+                v-for="r in results"
+                :key="r.id"
+                class="rounded-xl border-2 border-ink-100 px-4 py-3"
+              >
+                <p class="font-medium">
+                  <span :class="r.correct ? 'text-leaf-600' : 'text-coral-600'">
+                    {{ r.correct ? '✓' : '✗' }}
+                  </span>
+                  <span class="markdown-inline" v-html="renderInline(r.prompt)" />
+                </p>
+                <p v-if="!r.correct" class="text-sm text-ink-600">
+                  <template v-if="r.given">You said {{ r.given }}; </template>
+                  <template v-else>You didn't know; </template>
+                  the answer is {{ r.answer }}.
+                </p>
+              </li>
+            </ol>
+          </template>
 
-      <!-- A teach card -->
-      <template v-else-if="item && item.kind === 'teach_card'">
-        <p class="text-sm font-semibold tracking-wide text-lake-600 uppercase">New idea</p>
-        <h2 class="text-2xl font-extrabold">{{ item.title }}</h2>
-        <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />
-      </template>
+          <!-- A teach card -->
+          <template v-else-if="item && item.kind === 'teach_card'">
+            <div
+              class="flex flex-col gap-4 rounded-2xl border-2 border-lake-200 bg-lake-50 p-5 shadow-[0_4px_0_var(--color-lake-200)]"
+            >
+              <div class="flex items-center gap-3">
+                <span
+                  class="flex size-11 items-center justify-center rounded-xl bg-lake-500 text-white shadow-[0_3px_0_var(--color-lake-700)]"
+                >
+                  <Icon name="book" />
+                </span>
+                <p class="text-sm font-extrabold tracking-wide text-lake-600 uppercase">New idea</p>
+              </div>
+              <h2 class="text-2xl font-extrabold">{{ item.title }}</h2>
+              <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />
+            </div>
+          </template>
 
-      <!-- A question -->
-      <template v-else-if="question">
-        <div class="markdown text-xl" v-html="renderMarkdown(question.prompt)" />
+          <!-- A question -->
+          <template v-else-if="question">
+            <div class="markdown text-xl" v-html="renderMarkdown(question.prompt)" />
 
-        <!-- Keyed by run and question, so each starts empty, and is shuffled afresh -->
-        <ChoiceInput
-          v-if="question.kind === 'multiple_choice'"
-          :key="`${run}-${question.id}`"
-          v-model="response"
-          :question="question"
-          :disabled="!!feedback"
-          :marks="marks"
-        />
-        <TrueFalseInput
-          v-else-if="question.kind === 'true_false'"
-          :key="`${run}-${question.id}`"
-          v-model="response"
-          :disabled="!!feedback"
-          :marks="marks"
-        />
-        <FillBlankInput
-          v-else-if="question.kind === 'fill_blank'"
-          :key="`${run}-${question.id}`"
-          v-model="response"
-          :question="question"
-          :disabled="!!feedback"
-          :marks="marks"
-        />
-        <OrderingInput
-          v-else-if="question.kind === 'ordering'"
-          :key="`${run}-${question.id}`"
-          v-model="response"
-          :question="question"
-          :disabled="!!feedback"
-          :marks="marks"
-        />
-        <MatchingInput
-          v-else-if="question.kind === 'matching'"
-          :key="`${run}-${question.id}`"
-          v-model="response"
-          :question="question"
-          :disabled="!!feedback"
-          :marks="marks"
-        />
-        <TypedInput
-          v-else
-          :key="`${run}-${question.id}`"
-          v-model="response"
-          :question="question"
-          :disabled="!!feedback"
-          :marks="marks"
-        />
-      </template>
+            <!-- Keyed by run and question, so each starts empty, and is shuffled afresh -->
+            <ChoiceInput
+              v-if="question.kind === 'multiple_choice'"
+              :key="`${run}-${question.id}`"
+              v-model="response"
+              :question="question"
+              :disabled="!!feedback"
+              :marks="marks"
+            />
+            <TrueFalseInput
+              v-else-if="question.kind === 'true_false'"
+              :key="`${run}-${question.id}`"
+              v-model="response"
+              :disabled="!!feedback"
+              :marks="marks"
+            />
+            <FillBlankInput
+              v-else-if="question.kind === 'fill_blank'"
+              :key="`${run}-${question.id}`"
+              v-model="response"
+              :question="question"
+              :disabled="!!feedback"
+              :marks="marks"
+            />
+            <OrderingInput
+              v-else-if="question.kind === 'ordering'"
+              :key="`${run}-${question.id}`"
+              v-model="response"
+              :question="question"
+              :disabled="!!feedback"
+              :marks="marks"
+            />
+            <MatchingInput
+              v-else-if="question.kind === 'matching'"
+              :key="`${run}-${question.id}`"
+              v-model="response"
+              :question="question"
+              :disabled="!!feedback"
+              :marks="marks"
+            />
+            <TypedInput
+              v-else
+              :key="`${run}-${question.id}`"
+              v-model="response"
+              :question="question"
+              :disabled="!!feedback"
+              :marks="marks"
+            />
+          </template>
+        </div>
+      </Transition>
     </main>
 
     <footer
       v-if="lesson && !taken"
-      :class="['safe-bottom border-t-2 px-4 pt-5', footerStyle]"
+      :class="['safe-bottom px-4 pt-5', footerStyle]"
     >
       <div class="mx-auto flex max-w-md flex-col gap-3">
-        <div v-if="feedback">
-          <p :class="['text-xl font-extrabold', feedback.correct ? 'text-leaf-700' : 'text-coral-700']">
-            {{ feedback.title }}
-          </p>
-          <p v-if="!feedback.correct" class="font-medium">Answer: {{ feedback.answer }}</p>
-          <div class="markdown text-ink-700" v-html="renderMarkdown(feedback.explanation)" />
+        <div v-if="feedback" class="flex gap-4">
+          <span
+            :class="[
+              'pop flex size-12 shrink-0 items-center justify-center rounded-full bg-white',
+              feedback.correct ? 'text-leaf-500' : 'text-coral-500',
+            ]"
+          >
+            <Icon :name="feedback.correct ? 'check' : 'close'" :size="30" />
+          </span>
+          <div
+            :class="[
+              'flex min-w-0 flex-col gap-1',
+              feedback.correct ? 'text-leaf-800' : 'text-coral-800',
+            ]"
+          >
+            <p class="text-2xl font-extrabold">{{ feedback.title }}</p>
+            <template v-if="!feedback.correct">
+              <p class="font-extrabold">Correct answer:</p>
+              <p>{{ feedback.answer }}</p>
+            </template>
+            <div class="markdown mt-1 font-semibold" v-html="renderMarkdown(feedback.explanation)" />
+          </div>
         </div>
         <template v-if="finished">
           <p v-if="busy" class="text-ink-500">Saving…</p>
@@ -361,7 +401,7 @@ const footerStyle = computed(() => {
           :variant="feedback && !feedback.correct ? 'danger' : 'primary'"
           @click="next"
         >
-          {{ isLast ? 'Finish' : 'Continue' }}
+          {{ !question ? 'Got it' : isLast ? 'Finish' : feedback?.correct ? 'Continue' : 'Got it' }}
         </PupilButton>
       </div>
     </footer>
