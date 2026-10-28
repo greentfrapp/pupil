@@ -8,9 +8,9 @@ feedback) but none of Duolingo's assets: no owl, font, brand colours or sounds. 
 gamification yet. Three branches, in order:
 
 **`ui-foundation`**
-- [ ] Design tokens: Pupil's own bright palette, large radii, an off-white background, and the Nunito font bundled locally.
-- [ ] Shared components: 3D buttons, pressable choice tiles, a thick progress bar, and a small set of SVG icons.
-- [ ] Home and intake restyled, in a phone-width column centred on desktop.
+- [x] Design tokens: Pupil's own bright palette, large radii, an off-white background, and the Nunito font bundled locally.
+- [x] Shared components: 3D buttons, pressable choice tiles, a thick progress bar, and a small set of SVG icons.
+- [x] Home and intake restyled, in a phone-width column centred on desktop.
 
 **`ui-path`**
 - [ ] The topic page as a winding path of round lesson nodes under coloured unit banners: done, current (with a START bubble), ready and locked.
