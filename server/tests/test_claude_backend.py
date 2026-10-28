@@ -73,6 +73,20 @@ def test_result_maps_to_completion_or_error():
     assert err == AgentError(message="error_max_turns")
 
 
+def test_a_turn_names_the_model_that_wrote_most_of_it():
+    usage = {
+        "claude-haiku-4-5": {"inputTokens": 900, "outputTokens": 20},
+        "claude-sonnet-5-5": {"inputTokens": 300, "outputTokens": 1200},
+    }
+    (done,) = translate(_result(model_usage=usage))
+    assert done.model == "claude-sonnet-5-5"
+
+
+def test_options_take_the_model_and_effort_asked_for(tmp_path: Path):
+    options = build_options(AgentConfig(system_prompt="p", model="opus", effort="high"), tmp_path)
+    assert (options.model, options.effort) == ("opus", "high")
+
+
 def test_options_isolate_the_agent(tmp_path: Path):
     plain = build_options(AgentConfig(system_prompt="p", tools=[echo]), tmp_path)
     assert plain.tools == []
@@ -80,6 +94,8 @@ def test_options_isolate_the_agent(tmp_path: Path):
     assert plain.setting_sources == [] and plain.strict_mcp_config
     assert plain.permission_mode == "dontAsk"
     assert plain.include_partial_messages  # translate() takes text only from stream deltas
+
+    assert plain.model == "sonnet"  # Pupil's default, not the user's Claude Code setting
 
     web = build_options(AgentConfig(system_prompt="p", web_search=True), tmp_path)
     assert set(web.tools) == {"WebSearch", "WebFetch"}

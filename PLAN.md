@@ -1,9 +1,5 @@
 # Plan
 
-## Before release
-
-- **Codex backend:** a second agent backend next to `claude`, so Pupil isn't tied to one model. `AgentBackend` (`agents/base.py`) is the interface; the README already lists Codex.
-
 ## Known issues
 
 - **Lessons written ahead can repeat questions:** the brief lists an untaken lesson by title only, so the next one can ask the same thing (John Keel in the Discworld session). Give the brief its questions, or have the run read it.

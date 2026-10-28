@@ -7,7 +7,6 @@ other MCP servers, and nothing runs that was not allowed up front.
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -39,6 +38,8 @@ from pupil_server.agents.base import (
 from pupil_server.settings import pupil_home
 
 SERVER = "pupil"
+# An alias, which Claude Code resolves to the current Sonnet.
+DEFAULT_MODEL = "sonnet"
 MCP_PREFIX = f"mcp__{SERVER}__"
 WEB_TOOLS = {"WebSearch": "web_search", "WebFetch": "web_fetch"}
 
@@ -81,16 +82,25 @@ def translate(message: Any) -> list[AgentEvent]:
         if message.is_error:
             detail = "; ".join(message.errors or []) or message.result or message.subtype
             return [AgentError(message=detail)]
-        return [TurnComplete(cost_usd=message.total_cost_usd, usage=message.usage)]
+        return [
+            TurnComplete(
+                cost_usd=message.total_cost_usd,
+                usage=message.usage,
+                model=_main_model(message.model_usage or {}),
+            )
+        ]
     return []
+
+
+def _main_model(usage: dict[str, Any]) -> str | None:
+    """The model that wrote most of the turn; Claude Code may use a smaller one on the side."""
+    return max(usage, key=lambda m: usage[m].get("outputTokens", 0), default=None)
 
 
 def _sdk_tool(tool: Tool) -> SdkMcpTool[Any]:
     async def handler(arguments: dict[str, Any]) -> dict[str, Any]:
         result = await tool.invoke("", arguments)
-        output = result.output
-        text = output if isinstance(output, str) else json.dumps(output)
-        return {"content": [{"type": "text", "text": text}], "is_error": result.is_error}
+        return {"content": [{"type": "text", "text": result.text()}], "is_error": result.is_error}
 
     return SdkMcpTool(
         name=tool.name,
@@ -113,7 +123,8 @@ def build_options(config: AgentConfig, workdir: Path) -> ClaudeAgentOptions:
         setting_sources=[],
         permission_mode="dontAsk",
         include_partial_messages=True,
-        model=config.model,
+        model=config.model or DEFAULT_MODEL,
+        effort=config.effort,
         max_turns=config.max_turns,
         cwd=workdir,
     )
@@ -150,3 +161,6 @@ class ClaudeBackend:
         client = ClaudeSDKClient(build_options(config, self._workdir))
         await client.connect()
         return ClaudeSession(client)
+
+    async def close(self) -> None:
+        pass

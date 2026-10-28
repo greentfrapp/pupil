@@ -7,6 +7,7 @@ on some `AgentBackend`, and reads `AgentEvent`s back; each backend adapts its ru
 from __future__ import annotations
 
 import inspect
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Protocol, get_type_hints
@@ -66,6 +67,8 @@ class AgentConfig(BaseModel):
     """Let the agent search and fetch the web, using the backend's own implementation."""
     model: str | None = None
     """Backend-specific model name; None uses the backend's default."""
+    effort: str | None = None
+    """How hard the model thinks, e.g. "medium"; None uses the backend's default."""
     max_turns: int | None = None
 
 
@@ -91,11 +94,17 @@ class ToolResult(BaseModel):
     output: ToolOutput | list[Any] | None
     is_error: bool = False
 
+    def text(self) -> str:
+        """The output as the text an agent reads back: as is, or as JSON."""
+        return self.output if isinstance(self.output, str) else json.dumps(self.output)
+
 
 class TurnComplete(BaseModel):
     type: Literal["turn_complete"] = "turn_complete"
     cost_usd: float | None = None
     usage: dict[str, Any] | None = None
+    model: str | None = None
+    """The model that did the turn, as the backend names it."""
 
 
 class AgentError(BaseModel):
@@ -129,6 +138,10 @@ class AgentBackend(Protocol):
     supports_web_search: bool
 
     async def open_session(self, config: AgentConfig) -> AgentSession: ...
+
+    async def close(self) -> None:
+        """Release what the backend keeps between sessions, once no session is open."""
+        ...
 
 
 def check_capabilities(backend: AgentBackend, config: AgentConfig) -> None:

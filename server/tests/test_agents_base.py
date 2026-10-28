@@ -56,6 +56,11 @@ async def test_invoke_reports_validation_and_handler_errors():
     assert failed.is_error and failed.output == "RuntimeError: boom"
 
 
+def test_a_tool_result_reads_back_as_text_or_json():
+    assert ToolResult(id="c1", output="5").text() == "5"
+    assert ToolResult(id="c2", output={"lesson_id": "les_1"}).text() == '{"lesson_id": "les_1"}'
+
+
 async def test_fake_backend_runs_tools_in_order():
     backend = FakeBackend([[Say("Adding now"), Call("add", {"a": 1, "b": 2}), Say("Done")]])
     session = await backend.open_session(AgentConfig(system_prompt="t", tools=[add]))

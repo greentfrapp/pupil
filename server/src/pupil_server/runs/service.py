@@ -43,9 +43,18 @@ class NotFinished(RuntimeError):
 
 
 class Runs:
-    def __init__(self, db: Database, backend: AgentBackend, max_turns: int = 24) -> None:
+    def __init__(
+        self,
+        db: Database,
+        backend: AgentBackend,
+        model: str | None = None,
+        effort: str | None = None,
+        max_turns: int = 24,
+    ) -> None:
         self._db = db
         self._backend = backend
+        self._model = model
+        self._effort = effort
         self._max_turns = max_turns
         self._runs = RunRepo(db)
         self._tasks: dict[str, asyncio.Task[bool]] = {}
@@ -155,6 +164,8 @@ class Runs:
             config = AgentConfig(
                 system_prompt=SYSTEM_PROMPT,
                 tools=learning_tools(self._db, learner_id, topic.id),
+                model=self._model,
+                effort=self._effort,
                 max_turns=self._max_turns,
             )
             session = await self._backend.open_session(config)
