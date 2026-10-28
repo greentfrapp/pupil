@@ -98,7 +98,7 @@ class QuestionBase(BaseModel):
     objective_ids: list[str] = Field(default_factory=list)
     """Syllabus objectives this question tests; required once the lesson is tied to a syllabus."""
     difficulty: int = Field(ge=1, le=5)
-    """1 (easiest) to 5."""
+    """A whole number from 1 (easiest) to 5 (hardest); never a fraction such as 0.4."""
     explanation: str = Field(min_length=1)
     """One or two sentences on why the answer is right. Shown after the learner answers, right
     or wrong, so a lucky guess still teaches."""

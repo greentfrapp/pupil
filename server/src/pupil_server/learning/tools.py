@@ -248,7 +248,8 @@ def learning_tools(db: Database, learner_id: str, topic_id: str) -> list[Tool]:
     @tool(
         "create_lesson",
         "Create a short lesson that teaches mostly by asking: 8 to 12 questions, or 10 to 15 "
-        "from easy to hard for placement. The app grades it, so every question needs an exact "
+        "from easy to hard for placement. Each question's difficulty is a whole number from 1 "
+        "to 5. The app grades it, so every question needs an exact "
         "answer. Mix question types, favouring ones where the learner has to produce or arrange "
         "the answer (fill_blank, text_match, ordering, matching) over true/false and multiple "
         "choice. "
