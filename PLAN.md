@@ -7,10 +7,10 @@ giveaways on Sonnet, abstract lessons on Codex, few teach cards anywhere, and ty
 marked wrong for small differences. Two branches, in order:
 
 **`lesson-quality`**
-- [ ] Claude defaults to Opus.
-- [ ] Runs search the web to check facts they aren't sure of, and to scope a topic before planning.
-- [ ] Prompt guidance on writing questions, on placement finding the edge of what the learner knows, and on teach cards that motivate their idea.
-- [ ] `create_lesson` refuses word banks without wrong words, and typed answers given away in the question.
+- [x] Claude defaults to Opus.
+- [x] Runs search the web to check facts they aren't sure of, and to scope a topic before planning.
+- [x] Prompt guidance on writing questions, on placement finding the edge of what the learner knows, and on teach cards that motivate their idea.
+- [x] `create_lesson` refuses word banks without wrong words, and typed answers given away in the question.
 
 **`lenient-grading`**
 - [ ] Typed answers forgive case, spacing, punctuation, hyphens, accents, a leading "the", British/American spelling, and one typo in answers of 6+ characters with no digits.
@@ -19,7 +19,7 @@ marked wrong for small differences. Two branches, in order:
 
 ## Known issues
 
-- **Lessons written ahead can repeat questions:** the brief lists an untaken lesson by title only, so the next one can ask the same thing (John Keel in the Discworld session). `lesson-quality` tells runs to read recent lessons first; the firmer fix is to give the brief their questions.
+- **Lessons written ahead can repeat questions:** the brief lists an untaken lesson by title only, so the next one can ask the same thing (John Keel in the Discworld session). Runs are now told to read recent lessons first; the firmer fix is to give the brief their questions.
 - **A run cut off by a restart** isn't run again until the learner finishes a lesson or taps Try again, losing the lesson written ahead once. Prepare every topic at startup.
 - **Explanations may run long,** up to about 210 characters.
 
