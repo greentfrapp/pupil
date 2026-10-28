@@ -237,6 +237,42 @@ SYLLABUS = Syllabus(
 )
 
 
+def test_a_word_bank_needs_a_wrong_word():
+    lesson(items=[fill_blank(word_bank=["2", "1", "3"])]).check_giveaways()
+    with pytest.raises(ValueError, match="'q''s word bank needs a few wrong words too"):
+        lesson(items=[fill_blank(word_bank=["2", "1"])]).check_giveaways()
+
+
+def test_a_typed_answer_may_not_be_given_away_in_its_prompt():
+    prompt = "Boots theory is named after what economic Unfairness? (socio-economic ___)"
+    text_match = TextMatch(
+        id="q", **(BASICS | {"prompt": prompt}), accepted=["class", "unfairness"]
+    )
+    with pytest.raises(ValueError, match="'q' gives its answer 'unfairness' away in the prompt"):
+        lesson(items=[text_match]).check_giveaways()
+
+    blank = FillBlank(
+        id="q",
+        **(BASICS | {"prompt": "Vampires come from uberwald."}),
+        text="They come from ___.",
+        blanks=[{"accepted": ["Überwald"]}],
+    )
+    with pytest.raises(ValueError, match="'q' gives its answer 'Überwald' away in the prompt"):
+        lesson(items=[blank]).check_giveaways()
+
+
+def test_every_giveaway_is_reported_at_once():
+    banks = [fill_blank(word_bank=["2", "1"]).model_copy(update={"id": i}) for i in ("q1", "q2")]
+    with pytest.raises(ValueError, match="'q1''s word bank .*; question 'q2''s word bank"):
+        lesson(items=banks).check_giveaways()
+
+
+def test_part_of_a_word_or_the_rest_of_the_line_isnt_a_giveaway():
+    guards = TextMatch(id="q1", **(BASICS | {"prompt": "Which Guardsmen?"}), accepted=["Guards"])
+    code = fill_blank(text="for name in names: print(___)", answers=("name",))
+    lesson(items=[guards, code]).check_giveaways()
+
+
 def test_check_tags():
     lesson("syl_1", tags=("obj_a",)).check_tags(SYLLABUS)
     with pytest.raises(
