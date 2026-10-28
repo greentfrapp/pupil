@@ -83,6 +83,13 @@ def test_numeric_rejects_negative_tolerance_and_nan():
         Numeric(id="q", **BASICS, answer=float("nan"))
 
 
+def test_typed_questions_stored_before_exact_existed_are_graded_leniently():
+    stored = '{"kind": "text_match", "id": "q", "prompt": "p", "difficulty": 1, '
+    stored += '"explanation": "Because.", "accepted": ["colour"]}'
+    question = TextMatch.model_validate_json(stored)
+    assert question.model_dump()["exact"] is False  # what the lesson player is sent
+
+
 def test_text_match_rejects_blank_accepted_answers():
     with pytest.raises(ValidationError, match="accepts a blank answer"):
         TextMatch(id="q", **BASICS, accepted=["ok", "   "])
