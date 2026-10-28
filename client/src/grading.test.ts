@@ -8,7 +8,7 @@ import type {
   TextMatch,
   TrueFalse,
 } from './api/lessons'
-import { answerText, grade, responseText } from './grading'
+import { answerText, feedbackFor, grade, responseText } from './grading'
 
 const basics = { prompt: 'p', objective_ids: [], difficulty: 1, explanation: 'Because.' }
 
@@ -241,5 +241,55 @@ describe('answerText', () => {
   it('lists items in order, and pairs', () => {
     expect(answerText(ordering('boil', 'pour'))).toBe('boil → pour')
     expect(answerText(matching(['cat', 'chat'], ['dog', 'chien']))).toBe('cat → chat; dog → chien')
+  })
+})
+
+describe('feedbackFor', () => {
+  it('marks picked choices right or wrong, and right ones not picked as missed', () => {
+    expect(feedbackFor(choice(['a']), picks('a'))).toEqual({ a: 'right' })
+    expect(feedbackFor(choice(['a']), picks('b'))).toEqual({ a: 'missed', b: 'wrong' })
+    expect(feedbackFor(choice(['a', 'c'], true), picks('a', 'b'))).toEqual({
+      a: 'right',
+      b: 'wrong',
+      c: 'missed',
+    })
+  })
+
+  it('marks true or false', () => {
+    expect(feedbackFor(trueFalse(true), { kind: 'bool', value: true })).toEqual({ true: 'right' })
+    expect(feedbackFor(trueFalse(true), { kind: 'bool', value: false })).toEqual({
+      false: 'wrong',
+      true: 'missed',
+    })
+  })
+
+  it('shows the right answer as missed when the learner did not know', () => {
+    expect(feedbackFor(choice(['b']), null)).toEqual({ b: 'missed' })
+    expect(feedbackFor(trueFalse(false), null)).toEqual({ false: 'missed' })
+    expect(feedbackFor(textMatch(['Vimes']), null)).toEqual({})
+  })
+
+  it('marks each blank, graded as the question is', () => {
+    const q = fillBlank('___ and ___', [['Vimes'], ['Carrot']])
+    expect(feedbackFor(q, blanks('vimes', 'Angua'))).toEqual({ 0: 'right', 1: 'wrong' })
+  })
+
+  it('marks each place in an ordering', () => {
+    const q = ordering('boil', 'pour', 'stir')
+    expect(feedbackFor(q, order('0', '2', '1'))).toEqual({ 0: 'right', 1: 'wrong', 2: 'wrong' })
+  })
+
+  it('marks each match by its left-hand side', () => {
+    const q = matching(['cat', 'chat'], ['dog', 'chien'], ['cow', 'vache'])
+    expect(feedbackFor(q, matched({ 0: '0', 1: '2', 2: '1' }))).toEqual({
+      0: 'right',
+      1: 'wrong',
+      2: 'wrong',
+    })
+  })
+
+  it('marks a typed answer as a whole', () => {
+    expect(feedbackFor(numeric(42, 1), number(41.5))).toEqual({ answer: 'right' })
+    expect(feedbackFor(textMatch(['Vimes']), text('Carrot'))).toEqual({ answer: 'wrong' })
   })
 })

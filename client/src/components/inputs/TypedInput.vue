@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { LessonResponse, Numeric, TextMatch } from '../../api/lessons'
-import { inputClass } from './styles'
+import type { Mark } from '../../grading'
+import { typedClass } from './styles'
 
-const props = defineProps<{ question: Numeric | TextMatch; disabled: boolean }>()
+const props = defineProps<{
+  question: Numeric | TextMatch
+  disabled: boolean
+  marks?: Record<string, Mark> | null
+}>()
 const response = defineModel<LessonResponse | null>({ required: true })
 
 const typed = ref('')
@@ -25,7 +30,7 @@ watch(typed, (value) => {
       v-model="typed"
       :inputmode="question.kind === 'numeric' ? 'decimal' : 'text'"
       :disabled="disabled"
-      :class="inputClass"
+      :class="typedClass(marks?.answer)"
       autofocus
     />
     <span v-if="question.kind === 'numeric' && question.unit" class="text-lg text-ink-600">

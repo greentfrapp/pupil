@@ -2,9 +2,15 @@
 import { ref } from 'vue'
 import type { LessonResponse, Matching } from '../../api/lessons'
 import { shuffle } from '../../shuffle'
+import type { Mark } from '../../grading'
 import { tileClass } from './styles'
 
-const props = defineProps<{ question: Matching; disabled: boolean }>()
+const props = defineProps<{
+  question: Matching
+  disabled: boolean
+  /** How each match did, by its left-hand side, once checked. */
+  marks?: Record<string, Mark> | null
+}>()
 const response = defineModel<LessonResponse | null>({ required: true })
 
 // Each side is shuffled on its own, so a pair's sides rarely line up.
@@ -46,6 +52,12 @@ function badge(leftId: string): number | null {
   return i < 0 ? null : i + 1
 }
 
+/** A right-hand side's mark: the mark of the match it's in. */
+function rightMark(rightId: string): Mark | undefined {
+  const left = Object.keys(matched.value).find((l) => matched.value[l] === rightId)
+  return left === undefined ? undefined : props.marks?.[left]
+}
+
 function rightBadge(rightId: string): number | null {
   const left = Object.keys(matched.value).find((l) => matched.value[l] === rightId)
   return left === undefined ? null : badge(left)
@@ -61,7 +73,7 @@ function rightBadge(rightId: string): number | null {
           v-for="p in lefts"
           :key="p.id"
           :disabled="disabled"
-          :class="[tileClass(selected === p.id), 'text-left']"
+          :class="[tileClass(selected === p.id, marks?.[p.id]), 'text-left']"
           @click="pickLeft(p.id)"
         >
           <span v-if="badge(p.id)" class="mr-2 font-semibold text-lake-600">{{ badge(p.id) }}</span>
@@ -73,7 +85,7 @@ function rightBadge(rightId: string): number | null {
           v-for="p in rights"
           :key="p.id"
           :disabled="disabled || selected === null"
-          :class="[tileClass(), 'text-left']"
+          :class="[tileClass(false, rightMark(p.id)), 'text-left']"
           @click="pickRight(p.id)"
         >
           <span v-if="rightBadge(p.id)" class="mr-2 font-semibold text-lake-600">

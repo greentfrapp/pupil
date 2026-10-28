@@ -108,6 +108,56 @@
   animation: bob 1.6s ease-in-out infinite;
 }
 
+/* A wrong answer shakes its head. */
+@keyframes shake {
+  0%,
+  100% {
+    translate: 0;
+  }
+  20%,
+  60% {
+    translate: -6px;
+  }
+  40%,
+  80% {
+    translate: 6px;
+  }
+}
+.shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+/* A badge or panel that pops in. */
+@keyframes pop {
+  0% {
+    scale: 0.6;
+    opacity: 0;
+  }
+  60% {
+    scale: 1.12;
+    opacity: 1;
+  }
+  100% {
+    scale: 1;
+  }
+}
+.pop {
+  animation: pop 0.35s ease-out;
+}
+
+/* The feedback panel slides up from the bottom. */
+@keyframes rise {
+  from {
+    translate: 0 100%;
+  }
+  to {
+    translate: 0 0;
+  }
+}
+.rise {
+  animation: rise 0.2s ease-out;
+}
+
 /* Bottom bars clear a phone's home indicator. */
 .safe-bottom {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));

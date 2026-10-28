@@ -10,7 +10,7 @@ import {
   type LessonResponse,
   type Question,
 } from '../api/lessons'
-import { answerText, grade, responseText } from '../grading'
+import { answerText, feedbackFor, grade, responseText } from '../grading'
 import { renderInline, renderMarkdown } from '../markdown'
 import ChoiceInput from './inputs/ChoiceInput.vue'
 import FillBlankInput from './inputs/FillBlankInput.vue'
@@ -66,6 +66,12 @@ const feedback = computed(() => {
     answer: answerText(q),
     explanation: q.explanation,
   }
+})
+/** How each part of the checked answer did, for the input to show. */
+const marks = computed(() => {
+  const q = question.value
+  const answer = q && answers.value[q.id]
+  return feedback.value && q && answer ? feedbackFor(q, answer.response) : null
 })
 const isLast = computed(() => index.value === (lesson.value?.items.length ?? 0) - 1)
 const progress = computed(() => {
@@ -256,12 +262,14 @@ const footerStyle = computed(() => {
           v-model="response"
           :question="question"
           :disabled="!!feedback"
+          :marks="marks"
         />
         <TrueFalseInput
           v-else-if="question.kind === 'true_false'"
           :key="`${run}-${question.id}`"
           v-model="response"
           :disabled="!!feedback"
+          :marks="marks"
         />
         <FillBlankInput
           v-else-if="question.kind === 'fill_blank'"
@@ -269,6 +277,7 @@ const footerStyle = computed(() => {
           v-model="response"
           :question="question"
           :disabled="!!feedback"
+          :marks="marks"
         />
         <OrderingInput
           v-else-if="question.kind === 'ordering'"
@@ -276,6 +285,7 @@ const footerStyle = computed(() => {
           v-model="response"
           :question="question"
           :disabled="!!feedback"
+          :marks="marks"
         />
         <MatchingInput
           v-else-if="question.kind === 'matching'"
@@ -283,6 +293,7 @@ const footerStyle = computed(() => {
           v-model="response"
           :question="question"
           :disabled="!!feedback"
+          :marks="marks"
         />
         <TypedInput
           v-else
@@ -290,6 +301,7 @@ const footerStyle = computed(() => {
           v-model="response"
           :question="question"
           :disabled="!!feedback"
+          :marks="marks"
         />
       </template>
     </main>

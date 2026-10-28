@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { LessonResponse, MultipleChoice } from '../../api/lessons'
+import type { Mark } from '../../grading'
 import { choiceClass } from './styles'
 
-const props = defineProps<{ question: MultipleChoice; disabled: boolean }>()
+const props = defineProps<{
+  question: MultipleChoice
+  disabled: boolean
+  /** How each option did, once checked. */
+  marks?: Record<string, Mark> | null
+}>()
 const response = defineModel<LessonResponse | null>({ required: true })
 
 const picked = ref<string[]>([])
@@ -24,7 +30,7 @@ function toggle(optionId: string) {
       v-for="o in question.options"
       :key="o.id"
       :disabled="disabled"
-      :class="choiceClass(picked.includes(o.id))"
+      :class="choiceClass(picked.includes(o.id), marks?.[o.id])"
       @click="toggle(o.id)"
     >
       {{ o.text }}

@@ -2,9 +2,15 @@
 import { computed, ref } from 'vue'
 import { BLANK, type FillBlank, type LessonResponse } from '../../api/lessons'
 import { shuffle } from '../../shuffle'
+import type { Mark } from '../../grading'
 import { tileClass } from './styles'
 
-const props = defineProps<{ question: FillBlank; disabled: boolean }>()
+const props = defineProps<{
+  question: FillBlank
+  disabled: boolean
+  /** How each blank did, once checked. */
+  marks?: Record<string, Mark> | null
+}>()
 const response = defineModel<LessonResponse | null>({ required: true })
 
 /** The text around the blanks: one more piece than there are blanks. */
@@ -32,6 +38,14 @@ function place(tile: number) {
   update()
 }
 
+/** A blank turns green or red once checked. */
+function blankLook(blank: number): string {
+  const mark = props.marks?.[blank]
+  if (mark === 'right') return 'border-leaf-500 bg-leaf-50 text-leaf-700'
+  if (mark === 'wrong') return 'shake border-coral-500 bg-coral-50 text-coral-700'
+  return props.question.word_bank ? 'border-ink-400' : 'border-ink-200'
+}
+
 function clear(blank: number) {
   placed.value[blank] = null
   update()
@@ -47,7 +61,10 @@ function clear(blank: number) {
           <button
             v-if="question.word_bank"
             :disabled="disabled || placed[i] === null"
-            class="mx-1 inline-block min-w-16 rounded-lg border-b-2 border-ink-400 px-2 align-baseline"
+            :class="[
+              'mx-1 inline-block min-w-16 rounded-lg border-b-2 px-2 align-baseline',
+              blankLook(i),
+            ]"
             @click="clear(i)"
           >
             {{ placed[i] === null ? ' ' : tiles[placed[i]] }}
@@ -56,7 +73,10 @@ function clear(blank: number) {
             v-else
             v-model="typed[i]"
             :disabled="disabled"
-            class="mx-1 w-28 rounded-lg border-2 border-ink-200 px-2 align-baseline focus:border-lake-500 focus:outline-none"
+            :class="[
+              'mx-1 w-28 rounded-lg border-2 px-2 align-baseline focus:border-lake-500 focus:outline-none',
+              blankLook(i),
+            ]"
             @input="update"
           />
         </template>

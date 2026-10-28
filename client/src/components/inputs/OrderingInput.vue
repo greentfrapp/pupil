@@ -2,9 +2,15 @@
 import { ref } from 'vue'
 import type { LessonResponse, Ordering } from '../../api/lessons'
 import { outOfOrder } from '../../shuffle'
+import type { Mark } from '../../grading'
 import { tileClass } from './styles'
 
-const props = defineProps<{ question: Ordering; disabled: boolean }>()
+const props = defineProps<{
+  question: Ordering
+  disabled: boolean
+  /** How each place in the order did, once checked. */
+  marks?: Record<string, Mark> | null
+}>()
 const response = defineModel<LessonResponse | null>({ required: true })
 
 /** The items to pick from, never already in the right order. */
@@ -30,7 +36,7 @@ const text = (id: string) => pool.find((o) => o.id === id)?.text
       <li v-for="(id, i) in placed" :key="id">
         <button
           :disabled="disabled"
-          :class="[tileClass(true), 'w-full text-left']"
+          :class="[tileClass(true, marks?.[i]), 'w-full text-left']"
           @click="toggle(id)"
         >
           <span class="mr-2 text-ink-400">{{ i + 1 }}.</span>{{ text(id) }}

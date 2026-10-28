@@ -44,6 +44,69 @@ export function grade(question: Question, response: LessonResponse): boolean {
   }
 }
 
+/**
+ * How one part of a checked answer did. right: picked and right. wrong: picked and wrong.
+ * missed: right, but not picked.
+ */
+export type Mark = 'right' | 'wrong' | 'missed'
+
+/**
+ * How each part of a checked answer did, for the input to show. Keyed by option id
+ * (multiple_choice), 'true' or 'false' (true_false), blank index (fill_blank), position
+ * (ordering), left-hand pair id (matching), or 'answer' (numeric, text_match). A null response
+ * is the learner saying they didn't know: the right choices show as missed.
+ */
+export function feedbackFor(
+  question: Question,
+  response: LessonResponse | null,
+): Record<string, Mark> {
+  const marks: Record<string, Mark> = {}
+  switch (question.kind) {
+    case 'multiple_choice': {
+      const chosen = response?.kind === 'choice' ? response.option_ids : []
+      for (const o of question.options) {
+        const right = question.correct.includes(o.id)
+        if (chosen.includes(o.id)) marks[o.id] = right ? 'right' : 'wrong'
+        else if (right) marks[o.id] = 'missed'
+      }
+      return marks
+    }
+    case 'true_false': {
+      const right = String(question.answer)
+      if (response?.kind !== 'bool') return { [right]: 'missed' }
+      const given = String(response.value)
+      if (given === right) return { [given]: 'right' }
+      return { [given]: 'wrong', [right]: 'missed' }
+    }
+    case 'fill_blank': {
+      const values = response?.kind === 'blanks' ? response.values : []
+      question.blanks.forEach((b, i) => {
+        if (values[i] !== undefined)
+          marks[i] = matches(values[i], b.accepted, question) ? 'right' : 'wrong'
+      })
+      return marks
+    }
+    case 'ordering': {
+      const ids = response?.kind === 'order' ? response.item_ids : []
+      ids.forEach((id, i) => {
+        marks[i] = question.sequence[i]?.id === id ? 'right' : 'wrong'
+      })
+      return marks
+    }
+    case 'matching': {
+      const given = response?.kind === 'matches' ? response.matches : {}
+      for (const [left, right] of Object.entries(given)) {
+        marks[left] = left === right ? 'right' : 'wrong'
+      }
+      return marks
+    }
+    case 'numeric':
+    case 'text_match':
+      if (!response) return marks
+      return { answer: grade(question, response) ? 'right' : 'wrong' }
+  }
+}
+
 /** The correct answer, as the learner sees it after answering. */
 export function answerText(question: Question): string {
   switch (question.kind) {
