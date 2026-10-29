@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { listTopics, type Topic } from '../api/topics'
 import Icon from './ui/Icon.vue'
-import ProgressRing from './ui/ProgressRing.vue'
+import ProgressBar from './ui/ProgressBar.vue'
 import PupilButton from './ui/PupilButton.vue'
 
 const emit = defineEmits<{ open: [topicId: string]; learn: [] }>()
@@ -35,9 +35,9 @@ function progress(topic: Topic): string {
   return `${done} of ${stops} lessons done`
 }
 
-function fraction(topic: Topic): number {
+function percent(topic: Topic): number {
   const { done, stops } = counts(topic)
-  return stops ? done / stops : 0
+  return stops ? (done / stops) * 100 : 0
 }
 </script>
 
@@ -69,13 +69,13 @@ function fraction(topic: Topic): number {
             >
               <Icon name="trophy" :size="28" label="Finished" />
             </div>
-            <ProgressRing v-else :fraction="fraction(topic)">
-              <Icon name="book" :size="22" class="text-leaf-500" />
-            </ProgressRing>
-            <span class="flex min-w-0 flex-col">
+            <div class="flex min-w-0 flex-1 flex-col gap-1">
               <span class="truncate text-lg font-extrabold">{{ topic.request }}</span>
               <span class="text-ink-500">{{ progress(topic) }}</span>
-            </span>
+              <div v-if="!topic.finished" class="mt-1 flex">
+                <ProgressBar :percent="percent(topic)" fill="bg-sun-400" />
+              </div>
+            </div>
           </button>
         </li>
       </ul>

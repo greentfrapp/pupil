@@ -1,7 +1,15 @@
 <script setup lang="ts">
-// A thick progress bar, with a highlight along its fill.
+// A thick, rounded progress bar.
 
-defineProps<{ /** 0 to 100. */ percent: number }>()
+withDefaults(
+  defineProps<{
+    /** 0 to 100. */
+    percent: number
+    /** The fill's background class. */
+    fill?: string
+  }>(),
+  { fill: 'bg-leaf-500' },
+)
 </script>
 
 <template>
@@ -13,10 +21,8 @@ defineProps<{ /** 0 to 100. */ percent: number }>()
     aria-valuemax="100"
   >
     <div
-      class="h-full rounded-full bg-leaf-500 px-2 pt-1 transition-[width] duration-500 ease-out"
+      :class="['h-full rounded-full transition-[width] duration-500 ease-out', fill]"
       :style="{ width: `${percent}%` }"
-    >
-      <div v-if="percent > 4" class="h-1 rounded-full bg-white/35" />
-    </div>
+    />
   </div>
 </template>
