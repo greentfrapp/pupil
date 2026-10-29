@@ -236,7 +236,7 @@ function nodeLabel(n: PathNode): string {
             <p class="text-ink-700">
               Want to keep going? Pupil can add units that go deeper, picking up from here.
             </p>
-            <PupilButton :disabled="busy" class="self-start" @click="ask(extendTopic)">
+            <PupilButton variant="success" :disabled="busy" class="self-start" @click="ask(extendTopic)">
               Go further
             </PupilButton>
           </template>
@@ -334,7 +334,7 @@ function nodeLabel(n: PathNode): string {
                   </p>
                   <PupilButton
                     block
-                    :variant="node.state === 'done' ? 'secondary' : 'primary'"
+                    :variant="node.state === 'done' ? 'secondary' : 'success'"
                     @click="emit('play', node.lessonId)"
                   >
                     {{ node.state === 'done' ? 'Review' : 'Start' }}
@@ -347,7 +347,7 @@ function nodeLabel(n: PathNode): string {
                 <template v-else-if="node.here && next?.kind === 'stuck'">
                   <p class="font-extrabold text-coral-600">Something went wrong</p>
                   <p v-if="next.error" class="text-ink-600">{{ next.error }}</p>
-                  <PupilButton block :disabled="busy" @click="ask(prepareTopic)">
+                  <PupilButton variant="success" block :disabled="busy" @click="ask(prepareTopic)">
                     Try again
                   </PupilButton>
                 </template>
@@ -389,7 +389,9 @@ function nodeLabel(n: PathNode): string {
             <template v-if="next?.kind === 'done'">
               <p class="text-lg font-extrabold">Want to keep going?</p>
               <p class="text-ink-600">Pupil can add units that go deeper, picking up from here.</p>
-              <PupilButton block :disabled="busy" @click="ask(extendTopic)">Go further</PupilButton>
+              <PupilButton variant="success" block :disabled="busy" @click="ask(extendTopic)">
+                Go further
+              </PupilButton>
             </template>
             <template v-else-if="next?.kind === 'waiting' && hereKey === 'trophy'">
               <p class="font-extrabold">{{ WAITING[next.job] }}</p>
@@ -411,7 +413,7 @@ function nodeLabel(n: PathNode): string {
     >
       <div class="mx-auto flex max-w-md flex-col gap-3">
         <template v-if="next.kind === 'ready'">
-          <PupilButton block @click="emit('play', next.lessonId)">
+          <PupilButton variant="success" block @click="emit('play', next.lessonId)">
             {{ current === 'plan' ? 'Start your first lesson' : 'Start' }}
           </PupilButton>
         </template>
@@ -422,7 +424,9 @@ function nodeLabel(n: PathNode): string {
           <p class="text-coral-600">
             Something went wrong preparing this<span v-if="next.error">: {{ next.error }}</span>
           </p>
-          <PupilButton block :disabled="busy" @click="ask(prepareTopic)">Try again</PupilButton>
+          <PupilButton variant="success" block :disabled="busy" @click="ask(prepareTopic)">
+            Try again
+          </PupilButton>
         </template>
       </div>
     </footer>

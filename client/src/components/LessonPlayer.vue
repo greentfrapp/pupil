@@ -428,7 +428,9 @@ const footerStyle = computed(() => {
           <p v-else-if="saveProblem" class="text-coral-600">{{ saveProblem.message }}</p>
           <div class="flex flex-col gap-3">
             <!-- Not while saving: the topic would still show this lesson as the next one -->
-            <PupilButton block :disabled="busy" @click="emit('close')">Continue</PupilButton>
+            <PupilButton variant="success" block :disabled="busy" @click="emit('close')">
+              Continue
+            </PupilButton>
             <PupilButton
               v-if="saveProblem?.canRetry"
               variant="secondary"
@@ -458,12 +460,14 @@ const footerStyle = computed(() => {
           >
             I don't know
           </PupilButton>
-          <PupilButton :disabled="!response" class="flex-1" @click="check">Check</PupilButton>
+          <PupilButton variant="success" :disabled="!response" class="flex-1" @click="check">
+            Check
+          </PupilButton>
         </div>
         <PupilButton
           v-else
           block
-          :variant="feedback && !feedback.correct ? 'danger' : 'primary'"
+          :variant="feedback && !feedback.correct ? 'danger' : 'success'"
           @click="next"
         >
           {{ !question ? 'Got it' : isLast ? 'Finish' : feedback?.correct ? 'Continue' : 'Got it' }}
