@@ -42,12 +42,10 @@ function percent(topic: Topic): number {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-md flex-col gap-6 px-4 py-8">
-    <h1 class="text-4xl font-black tracking-tight text-leaf-500">pupil</h1>
-
-    <PupilButton block @click="emit('learn')">
-      <Icon name="plus" :size="20" />
+  <main class="mx-auto flex min-h-dvh max-w-md flex-col gap-6 px-4 py-16">
+    <PupilButton variant="primary" block @click="emit('learn')">
       Learn something new
+      <Icon name="plus" weight="bold" :size="18" />
     </PupilButton>
 
     <p v-if="error" class="text-coral-600">
@@ -56,11 +54,11 @@ function percent(topic: Topic): number {
     </p>
     <p v-else-if="!topics" class="text-ink-500">Loading…</p>
     <template v-else-if="topics.length">
-      <h2 class="text-xl">Your topics</h2>
+      <h2 class="text-xl">Continue learning</h2>
       <ul class="flex flex-col gap-3">
         <li v-for="topic in topics" :key="topic.id">
           <button
-            class="flex w-full items-center gap-4 rounded-2xl border-2 border-ink-200 bg-white px-4 py-4 text-left shadow-[0_4px_0_var(--color-ink-200)] transition-[transform,box-shadow] duration-75 hover:bg-ink-50 active:translate-y-1 active:shadow-none"
+            class="flex w-full items-center gap-4 rounded-2xl border-2 border-ink-200 bg-white px-4 py-4 text-left hover:bg-ink-50 active:translate-y-1 active:shadow-none"
             @click="emit('open', topic.id)"
           >
             <div
