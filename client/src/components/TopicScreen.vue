@@ -236,7 +236,12 @@ function nodeLabel(n: PathNode): string {
             <p class="text-ink-700">
               Want to keep going? Pupil can add units that go deeper, picking up from here.
             </p>
-            <PupilButton variant="success" :disabled="busy" class="self-start" @click="ask(extendTopic)">
+            <PupilButton
+              variant="success"
+              :disabled="busy"
+              class="self-start"
+              @click="ask(extendTopic)"
+            >
               Go further
             </PupilButton>
           </template>

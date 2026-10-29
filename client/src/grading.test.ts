@@ -205,8 +205,9 @@ describe('responseText', () => {
   it('names what was picked, not its ids', () => {
     expect(responseText(choice(['a']), picks('c', 'a'))).toBe('C, A')
     expect(responseText(ordering('boil', 'pour'), order('1', '0'))).toBe('pour → boil')
-    expect(responseText(matching(['cat', 'chat'], ['dog', 'chien']), matched({ 0: '1', 1: '0' })))
-      .toBe('cat → chien; dog → chat')
+    expect(
+      responseText(matching(['cat', 'chat'], ['dog', 'chien']), matched({ 0: '1', 1: '0' })),
+    ).toBe('cat → chien; dog → chat')
   })
 
   it('gives typed answers as typed', () => {

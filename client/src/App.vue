@@ -43,11 +43,6 @@ function closeLesson() {
       @close="view = { name: 'home' }"
       @play="openLesson"
     />
-    <LessonPlayer
-      v-else
-      :key="view.lessonId"
-      :lesson-id="view.lessonId"
-      @close="closeLesson"
-    />
+    <LessonPlayer v-else :key="view.lessonId" :lesson-id="view.lessonId" @close="closeLesson" />
   </div>
 </template>

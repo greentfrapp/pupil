@@ -3,22 +3,21 @@
 
 withDefaults(
   defineProps<{
-    variant?: "primary" | "success" | "secondary" | "danger" | "ghost";
+    variant?: 'primary' | 'success' | 'secondary' | 'danger' | 'ghost'
     /** As wide as its container, as on a phone. */
-    block?: boolean;
-    type?: "button" | "submit";
+    block?: boolean
+    type?: 'button' | 'submit'
   }>(),
-  { variant: "primary", block: false, type: "button" },
-);
+  { variant: 'primary', block: false, type: 'button' },
+)
 
 const looks = {
-  primary: "bg-sun-400 text-ink-900 hover:bg-sun-500",
-  success: "bg-leaf-500 text-white hover:bg-leaf-600",
-  danger: "bg-coral-500 text-white hover:bg-coral-600",
-  secondary:
-    "border-2 border-ink-200 bg-white text-lake-600 hover:bg-ink-50",
-  ghost: "text-lake-600 hover:bg-lake-50",
-};
+  primary: 'bg-sun-400 text-ink-900 hover:bg-sun-500',
+  success: 'bg-leaf-500 text-white hover:bg-leaf-600',
+  danger: 'bg-coral-500 text-white hover:bg-coral-600',
+  secondary: 'border-2 border-ink-200 bg-white text-lake-600 hover:bg-ink-50',
+  ghost: 'text-lake-600 hover:bg-lake-50',
+}
 </script>
 
 <template>

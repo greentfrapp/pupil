@@ -10,7 +10,8 @@ const pressable =
   'border-2 shadow-[0_4px_0_var(--edge)] transition-[transform,box-shadow] duration-75 active:translate-y-1 active:shadow-none disabled:active:translate-y-0'
 
 const MARKED: Record<Mark, string> = {
-  right: 'border-leaf-400 bg-leaf-50 text-leaf-700 [--edge:var(--color-leaf-400)] disabled:opacity-100',
+  right:
+    'border-leaf-400 bg-leaf-50 text-leaf-700 [--edge:var(--color-leaf-400)] disabled:opacity-100',
   wrong:
     'shake border-coral-400 bg-coral-50 text-coral-700 [--edge:var(--color-coral-400)] disabled:opacity-100',
   missed:

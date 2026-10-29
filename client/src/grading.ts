@@ -14,8 +14,9 @@ export function grade(question: Question, response: LessonResponse): boolean {
     case 'true_false':
       return expect(question, response, 'bool').value === question.answer
     case 'numeric':
-      return Math.abs(expect(question, response, 'number').value - question.answer) <=
-        question.tolerance
+      return (
+        Math.abs(expect(question, response, 'number').value - question.answer) <= question.tolerance
+      )
     case 'text_match': {
       const given = expect(question, response, 'text').text
       return matches(given, question.accepted, question)

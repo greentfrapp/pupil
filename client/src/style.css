@@ -1,10 +1,10 @@
-@import "tailwindcss";
-@import "@fontsource-variable/nunito";
+@import 'tailwindcss';
+@import '@fontsource-variable/nunito';
 
 /* Pupil's own palette and type. Static, so every shade is a CSS variable that components can
    use, e.g. for a button's darker bottom edge. */
 @theme static {
-  --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
+  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
 
   /* Greys, warm. */
   --color-ink-50: #f7f7f4;

@@ -65,11 +65,7 @@ const feedback = computed(() => {
   const q = question.value
   const answer = q && answers.value[q.id]
   if (finished.value || !q || !answer) return null
-  const title = answer.correct
-    ? praise.value
-    : answer.response
-      ? 'Not quite'
-      : "Here's the answer" // the learner said they didn't know
+  const title = answer.correct ? praise.value : answer.response ? 'Not quite' : "Here's the answer" // the learner said they didn't know
   return {
     correct: answer.correct,
     title,
@@ -254,7 +250,11 @@ const footerStyle = computed(() => {
                 v-for="(c, i) in CONFETTI"
                 :key="i"
                 :class="['confetti absolute top-0 h-3 w-2 rounded-sm', c.color]"
-                :style="{ left: `${c.left}%`, animationDelay: `${c.delay}s`, rotate: `${c.turn}deg` }"
+                :style="{
+                  left: `${c.left}%`,
+                  animationDelay: `${c.delay}s`,
+                  rotate: `${c.turn}deg`,
+                }"
               />
             </div>
 
@@ -275,14 +275,28 @@ const footerStyle = computed(() => {
             <div class="grid grid-cols-3 gap-3">
               <div
                 v-for="s in [
-                  { label: 'Accuracy', value: `${stats.accuracy}%`, look: 'border-leaf-500 bg-leaf-500 text-leaf-600' },
-                  { label: 'Time', value: stats.time, look: 'border-lake-500 bg-lake-500 text-lake-600' },
-                  { label: 'Right', value: `${stats.correct}/${stats.total}`, look: 'border-sun-400 bg-sun-400 text-sun-600' },
+                  {
+                    label: 'Accuracy',
+                    value: `${stats.accuracy}%`,
+                    look: 'border-leaf-500 bg-leaf-500 text-leaf-600',
+                  },
+                  {
+                    label: 'Time',
+                    value: stats.time,
+                    look: 'border-lake-500 bg-lake-500 text-lake-600',
+                  },
+                  {
+                    label: 'Right',
+                    value: `${stats.correct}/${stats.total}`,
+                    look: 'border-sun-400 bg-sun-400 text-sun-600',
+                  },
                 ]"
                 :key="s.label"
                 :class="['pop overflow-hidden rounded-2xl border-2', s.look]"
               >
-                <p class="py-1 text-center text-xs font-extrabold tracking-wide text-white uppercase">
+                <p
+                  class="py-1 text-center text-xs font-extrabold tracking-wide text-white uppercase"
+                >
                   {{ s.label }}
                 </p>
                 <p class="rounded-xl bg-white py-3 text-center text-xl font-black">
@@ -395,10 +409,7 @@ const footerStyle = computed(() => {
       </Transition>
     </main>
 
-    <footer
-      v-if="lesson && !taken"
-      :class="['safe-bottom px-4 pt-5', footerStyle]"
-    >
+    <footer v-if="lesson && !taken" :class="['safe-bottom px-4 pt-5', footerStyle]">
       <div class="mx-auto flex max-w-md flex-col gap-3">
         <div v-if="feedback" class="flex gap-4">
           <span
@@ -420,7 +431,10 @@ const footerStyle = computed(() => {
               <p class="font-extrabold">Correct answer:</p>
               <p>{{ feedback.answer }}</p>
             </template>
-            <div class="markdown mt-1 font-semibold" v-html="renderMarkdown(feedback.explanation)" />
+            <div
+              class="markdown mt-1 font-semibold"
+              v-html="renderMarkdown(feedback.explanation)"
+            />
           </div>
         </div>
         <template v-if="finished">

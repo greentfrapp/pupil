@@ -15,9 +15,7 @@ describe('renderMarkdown', () => {
   })
 
   it('shows HTML as text, and refuses unsafe links and images', () => {
-    expect(renderMarkdown('<script>x()</script>')).toBe(
-      '<p>&lt;script&gt;x()&lt;/script&gt;</p>\n',
-    )
+    expect(renderMarkdown('<script>x()</script>')).toBe('<p>&lt;script&gt;x()&lt;/script&gt;</p>\n')
     expect(renderMarkdown('[click](javascript:alert(1))')).not.toContain('<a')
     expect(renderMarkdown('![pic](https://example.com/p.png)')).not.toContain('<img')
   })
