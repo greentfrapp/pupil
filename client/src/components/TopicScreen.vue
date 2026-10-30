@@ -54,8 +54,20 @@ async function ask(request: (id: string) => Promise<Topic>) {
   }
 }
 
-onMounted(load)
-onUnmounted(() => clearTimeout(timer))
+/** Whether the page has scrolled, so the header casts a shadow over what's under it. */
+const pastTop = ref(false)
+function onScroll() {
+  pastTop.value = window.scrollY > 0
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
+onUnmounted(() => {
+  clearTimeout(timer)
+  window.removeEventListener('scroll', onScroll)
+})
 
 const current = computed(() => topic.value && screen(topic.value))
 const next = computed(() => topic.value && nextUp(topic.value))
@@ -136,9 +148,12 @@ function nodeLabel(n: PathNode): string {
 <template>
   <div class="flex min-h-dvh flex-col" @click="selected = null">
     <header
-      class="sticky top-0 z-20 border-b-2 border-ink-200 bg-ink-50/95 px-4 py-3 backdrop-blur"
+      :class="[
+        'sticky top-0 z-20 bg-ink-50 transition-shadow duration-200',
+        pastTop && 'shadow-[0_2px_8px_rgb(0_0_0/0.08)]',
+      ]"
     >
-      <div class="mx-auto flex max-w-md items-center gap-3">
+      <div class="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-4">
         <button
           class="flex size-11 shrink-0 items-center justify-center rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700"
           aria-label="All topics"
