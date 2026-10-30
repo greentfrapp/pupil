@@ -58,7 +58,7 @@ function percent(topic: Topic): number {
       <ul class="flex flex-col gap-3">
         <li v-for="topic in topics" :key="topic.id">
           <button
-            class="flex w-full items-center gap-4 rounded-2xl border-2 border-ink-200 bg-white px-4 py-4 text-left hover:bg-ink-50 active:translate-y-1 active:shadow-none"
+            class="flex w-full items-center gap-4 rounded-2xl border-2 border-ink-200 bg-white px-4 py-4 text-left hover:bg-ink-50"
             @click="emit('open', topic.id)"
           >
             <div

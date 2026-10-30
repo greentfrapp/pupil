@@ -123,19 +123,18 @@ function sway(i: number): string {
 
 // Units take turns at the palette. Whole class names, so Tailwind finds them.
 const UNIT_LOOKS = [
-  'bg-leaf-500 text-white shadow-[0_4px_0_var(--color-leaf-700)]',
-  'bg-lake-500 text-white shadow-[0_4px_0_var(--color-lake-700)]',
-  'bg-coral-500 text-white shadow-[0_4px_0_var(--color-coral-700)]',
-  'bg-sun-400 text-sun-900 shadow-[0_4px_0_var(--color-sun-600)]',
+  'bg-leaf-500 text-white',
+  'bg-lake-500 text-white',
+  'bg-coral-500 text-white',
+  'bg-sun-400 text-sun-900',
 ]
 
 function nodeLook(n: PathNode): string {
-  if (n.state === 'locked') return 'bg-ink-200 text-ink-400 [--edge:var(--color-ink-300)]'
-  if (n.state === 'done' && n.correct === n.questions)
-    return 'bg-sun-400 text-white [--edge:var(--color-sun-600)]'
-  if (n.state === 'done') return 'bg-leaf-500 text-white [--edge:var(--color-leaf-700)]'
-  if (n.state === 'current') return 'bg-leaf-500 text-white [--edge:var(--color-leaf-700)]'
-  return 'bg-lake-400 text-white [--edge:var(--color-lake-600)]'
+  if (n.state === 'locked') return 'bg-ink-200 text-ink-400'
+  if (n.state === 'done' && n.correct === n.questions) return 'bg-sun-400 text-white'
+  if (n.state === 'done') return 'bg-leaf-500 text-white'
+  if (n.state === 'current') return 'bg-leaf-500 text-white'
+  return 'bg-lake-400 text-white'
 }
 
 function nodeLabel(n: PathNode): string {
@@ -237,9 +236,7 @@ function nodeLabel(n: PathNode): string {
           v-if="current === 'finished'"
           class="flex flex-col gap-3 rounded-2xl border-2 border-sun-200 bg-sun-50 p-5"
         >
-          <div
-            class="flex size-14 items-center justify-center rounded-full bg-sun-400 text-white shadow-[0_4px_0_var(--color-sun-600)]"
-          >
+          <div class="flex size-14 items-center justify-center rounded-full bg-sun-400 text-white">
             <Icon name="trophy" :size="30" />
           </div>
           <h2 class="text-2xl font-extrabold">You've finished {{ topic.request }}!</h2>
@@ -314,14 +311,9 @@ function nodeLabel(n: PathNode): string {
                   <template v-else-if="next?.kind === 'waiting'">{{ WAITING[next.job] }}</template>
                   <template v-else-if="next?.kind === 'stuck'">Something went wrong</template>
                 </span>
-                <span
-                  v-if="node.state === 'current'"
-                  class="absolute -inset-2 animate-ping rounded-full border-4 border-leaf-300 [animation-duration:2s]"
-                  aria-hidden="true"
-                />
                 <button
                   :class="[
-                    'relative flex items-center justify-center rounded-full shadow-[0_6px_0_var(--edge)] transition-[transform,box-shadow] duration-75 active:translate-y-1.5 active:shadow-none',
+                    'relative flex items-center justify-center rounded-full',
                     node.state === 'current' ? 'size-20' : 'size-17',
                     nodeLook(node),
                   ]"
@@ -390,10 +382,8 @@ function nodeLabel(n: PathNode): string {
           </span>
           <button
             :class="[
-              'flex size-20 items-center justify-center rounded-full shadow-[0_6px_0_var(--edge)] transition-[transform,box-shadow] duration-75 active:translate-y-1.5 active:shadow-none',
-              topic.finished
-                ? 'bg-sun-400 text-white [--edge:var(--color-sun-600)]'
-                : 'bg-ink-200 text-ink-400 [--edge:var(--color-ink-300)]',
+              'flex size-20 items-center justify-center rounded-full',
+              topic.finished ? 'bg-sun-400 text-white' : 'bg-ink-200 text-ink-400',
             ]"
             :aria-label="topic.finished ? 'Finished! Go further' : 'The end of the path'"
             :aria-expanded="selected === 'trophy'"
