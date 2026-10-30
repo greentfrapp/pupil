@@ -71,7 +71,7 @@ function percent(topic: Topic): number {
               <span class="truncate text-lg font-extrabold">{{ topic.request }}</span>
               <span class="text-ink-500">{{ progress(topic) }}</span>
               <div v-if="!topic.finished" class="mt-1 flex">
-                <ProgressBar :percent="percent(topic)" fill="bg-sun-400" />
+                <ProgressBar :percent="percent(topic)" />
               </div>
             </div>
           </button>

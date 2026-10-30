@@ -8,7 +8,7 @@ withDefaults(
     /** The fill's background class. */
     fill?: string
   }>(),
-  { fill: 'bg-leaf-500' },
+  { fill: 'bg-sun-400' },
 )
 </script>
 
