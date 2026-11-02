@@ -1,5 +1,6 @@
 <script lang="ts">
-export type IconName = 'back' | 'book' | 'check' | 'close' | 'lock' | 'plus' | 'star' | 'trophy'
+export type IconName =
+  'back' | 'book' | 'check' | 'close' | 'lock' | 'plus' | 'retry' | 'star' | 'trophy'
 export type IconWeight = 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duotone'
 </script>
 
@@ -7,6 +8,7 @@ export type IconWeight = 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duoto
 // Pupil's icons, from Phosphor (phosphor-icons.com, MIT), in the current text colour.
 
 import {
+  PhArrowCounterClockwise,
   PhBookOpen,
   PhCaretLeft,
   PhCheck,
@@ -31,6 +33,7 @@ const ICONS: Record<IconName, { icon: Component; weight: IconWeight }> = {
   close: { icon: PhX, weight: 'bold' },
   lock: { icon: PhLock, weight: 'bold' },
   plus: { icon: PhPlus, weight: 'bold' },
+  retry: { icon: PhArrowCounterClockwise, weight: 'bold' },
   star: { icon: PhStar, weight: 'fill' },
   trophy: { icon: PhTrophy, weight: 'bold' },
 }
