@@ -1,10 +1,10 @@
-@import "tailwindcss";
-@import "@fontsource-variable/nunito";
+@import 'tailwindcss';
+@import '@fontsource-variable/nunito';
 
 /* Pupil's own palette and type. Static, so every shade is a CSS variable that components can
    use, e.g. for a button's darker bottom edge. */
 @theme static {
-  --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
+  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
 
   /* Greys, warm. */
   --color-ink-50: #f7f7f4;
@@ -65,6 +65,17 @@
   --color-sun-700: #b46000;
   --color-sun-800: #924a05;
   --color-sun-900: #783d08;
+
+  /* Units on the path take turns at these: each a base, and a darker shade for text on white
+     and for hovering. All take white text. */
+  --color-moss-500: #445800;
+  --color-moss-600: #364600;
+  --color-ember-500: #c05600;
+  --color-ember-600: #9c4600;
+  --color-pine-500: #005844;
+  --color-pine-600: #004636;
+  --color-plum-500: #890057;
+  --color-plum-600: #6e0046;
 }
 
 @layer base {

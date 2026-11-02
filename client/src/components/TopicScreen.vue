@@ -54,8 +54,20 @@ async function ask(request: (id: string) => Promise<Topic>) {
   }
 }
 
-onMounted(load)
-onUnmounted(() => clearTimeout(timer))
+/** Whether the page has scrolled, so the header casts a shadow over what's under it. */
+const pastTop = ref(false)
+function onScroll() {
+  pastTop.value = window.scrollY > 0
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
+onUnmounted(() => {
+  clearTimeout(timer)
+  window.removeEventListener('scroll', onScroll)
+})
 
 const current = computed(() => topic.value && screen(topic.value))
 const next = computed(() => topic.value && nextUp(topic.value))
@@ -85,10 +97,8 @@ const nodes = computed(() => sections.value.flatMap((s) => s.nodes))
 const stopsDone = computed(() => nodes.value.filter((n) => n.state === 'done').length)
 /** Where the learner is up to; the trophy once there's nowhere else. */
 const hereKey = computed(() => nodes.value.find((n) => n.here)?.key ?? 'trophy')
-/** Each node's place on the whole path, for the wave. */
-const order = computed(() => new Map(nodes.value.map((n, i) => [n.key, i])))
 
-/** The node whose card is open. */
+/** The trophy's card, when it's open. */
 const selected = ref<string | null>(null)
 function toggle(key: string) {
   selected.value = selected.value === key ? null : key
@@ -103,42 +113,35 @@ async function scrollToHere() {
   document.getElementById(`node-${hereKey.value}`)?.scrollIntoView({ block: 'center' })
 }
 
-// A gentle wave, left and right, along the path.
-const WAVE = [0, 1, 1.5, 1, 0, -1, -1.5, -1]
-function sway(i: number): string {
-  return `translateX(${WAVE[i % WAVE.length] * 3}rem)`
-}
-
-// Units take turns at the palette. Whole class names, so Tailwind finds them.
+// Units take turns at their own palette. Each sets --unit (the banner, a done lesson's border and
+// score, and the START button) and --unit-dark (a done lesson's title, and hovering) for what's
+// inside it. Whole class names, so Tailwind finds them.
 const UNIT_LOOKS = [
-  'bg-leaf-500 text-white shadow-[0_4px_0_var(--color-leaf-700)]',
-  'bg-lake-500 text-white shadow-[0_4px_0_var(--color-lake-700)]',
-  'bg-coral-500 text-white shadow-[0_4px_0_var(--color-coral-700)]',
-  'bg-sun-400 text-sun-900 shadow-[0_4px_0_var(--color-sun-600)]',
+  '[--unit:var(--color-moss-500)] [--unit-dark:var(--color-moss-600)]',
+  '[--unit:var(--color-ember-500)] [--unit-dark:var(--color-ember-600)]',
+  '[--unit:var(--color-pine-500)] [--unit-dark:var(--color-pine-600)]',
+  '[--unit:var(--color-plum-500)] [--unit-dark:var(--color-plum-600)]',
 ]
 
-function nodeLook(n: PathNode): string {
-  if (n.state === 'locked') return 'bg-ink-200 text-ink-400 [--edge:var(--color-ink-300)]'
-  if (n.state === 'done' && n.correct === n.questions)
-    return 'bg-sun-400 text-white [--edge:var(--color-sun-600)]'
-  if (n.state === 'done') return 'bg-leaf-500 text-white [--edge:var(--color-leaf-700)]'
-  if (n.state === 'current') return 'bg-leaf-500 text-white [--edge:var(--color-leaf-700)]'
-  return 'bg-lake-400 text-white [--edge:var(--color-lake-600)]'
+function unitLook(u: number): string {
+  return UNIT_LOOKS[u % UNIT_LOOKS.length]
 }
 
-function nodeLabel(n: PathNode): string {
-  if (n.state === 'locked') return 'A lesson still to come'
-  if (n.state === 'done') return `${n.title}, done: ${n.correct} of ${n.questions}`
-  return n.title ?? ''
+function doneLabel(n: PathNode): string {
+  const perfect = n.correct === n.questions ? ', a perfect score' : ''
+  return `${n.title}, ${n.correct} of ${n.questions} right${perfect}. Retry it`
 }
 </script>
 
 <template>
   <div class="flex min-h-dvh flex-col" @click="selected = null">
     <header
-      class="sticky top-0 z-20 border-b-2 border-ink-200 bg-ink-50/95 px-4 py-3 backdrop-blur"
+      :class="[
+        'sticky top-0 z-20 bg-ink-50 transition-shadow duration-200',
+        pastTop && 'shadow-[0_2px_8px_rgb(0_0_0/0.08)]',
+      ]"
     >
-      <div class="mx-auto flex max-w-md items-center gap-3">
+      <div class="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-4">
         <button
           class="flex size-11 shrink-0 items-center justify-center rounded-xl text-ink-400 hover:bg-ink-100 hover:text-ink-700"
           aria-label="All topics"
@@ -199,8 +202,8 @@ function nodeLabel(n: PathNode): string {
           >
             <span
               :class="[
-                'flex size-10 shrink-0 items-center justify-center rounded-xl text-lg font-black',
-                UNIT_LOOKS[i % UNIT_LOOKS.length],
+                'flex size-10 shrink-0 items-center justify-center rounded-xl bg-(--unit) text-lg font-black text-white',
+                unitLook(i),
               ]"
             >
               {{ i + 1 }}
@@ -222,9 +225,7 @@ function nodeLabel(n: PathNode): string {
           v-if="current === 'finished'"
           class="flex flex-col gap-3 rounded-2xl border-2 border-sun-200 bg-sun-50 p-5"
         >
-          <div
-            class="flex size-14 items-center justify-center rounded-full bg-sun-400 text-white shadow-[0_4px_0_var(--color-sun-600)]"
-          >
+          <div class="flex size-14 items-center justify-center rounded-full bg-sun-400 text-white">
             <Icon name="trophy" :size="30" />
           </div>
           <h2 class="text-2xl font-extrabold">You've finished {{ topic.request }}!</h2>
@@ -236,7 +237,12 @@ function nodeLabel(n: PathNode): string {
             <p class="text-ink-700">
               Want to keep going? Pupil can add units that go deeper, picking up from here.
             </p>
-            <PupilButton :disabled="busy" class="self-start" @click="ask(extendTopic)">
+            <PupilButton
+              variant="success"
+              :disabled="busy"
+              class="self-start"
+              @click="ask(extendTopic)"
+            >
               Go further
             </PupilButton>
           </template>
@@ -249,13 +255,14 @@ function nodeLabel(n: PathNode): string {
           Placement: {{ score(placement) }}
         </p>
 
-        <section v-for="(section, u) in sections" :key="section.unitId" class="flex flex-col">
+        <section
+          v-for="(section, u) in sections"
+          :key="section.unitId"
+          :class="['flex flex-col', unitLook(u)]"
+        >
           <!-- The unit's banner -->
           <div
-            :class="[
-              'flex items-center justify-between gap-3 rounded-2xl px-5 py-4',
-              UNIT_LOOKS[u % UNIT_LOOKS.length],
-            ]"
+            class="flex items-center justify-between gap-3 rounded-2xl bg-(--unit) px-5 py-4 text-white"
           >
             <div class="min-w-0">
               <p class="text-sm font-extrabold tracking-wide uppercase opacity-80">
@@ -269,92 +276,83 @@ function nodeLabel(n: PathNode): string {
             </span>
           </div>
 
-          <!-- Its lessons, winding down the page -->
-          <ol class="flex flex-col items-center gap-7 py-10">
-            <li
-              v-for="node in section.nodes"
-              :id="`node-${node.key}`"
-              :key="node.key"
-              class="relative flex flex-col items-center"
-            >
-              <!-- The node sways along the wave; its card stays centred below -->
-              <div class="relative" :style="{ transform: sway(order.get(node.key)!) }">
-                <!-- Where the learner is up to -->
-                <span
-                  v-if="node.key === hereKey && selected !== node.key"
-                  :class="[
-                    'bob absolute -top-12 left-1/2 z-10 rounded-xl border-2 px-3 py-1.5 text-sm font-extrabold whitespace-nowrap',
-                    next?.kind === 'stuck'
-                      ? 'border-coral-200 bg-coral-50 text-coral-600'
-                      : 'border-ink-200 bg-white text-leaf-600',
-                    next?.kind === 'waiting' && 'animate-pulse',
-                  ]"
-                >
-                  <template v-if="next?.kind === 'ready'">START</template>
-                  <template v-else-if="next?.kind === 'waiting'">{{ WAITING[next.job] }}</template>
-                  <template v-else-if="next?.kind === 'stuck'">Something went wrong</template>
+          <!-- Its lessons, as cards -->
+          <ol class="flex flex-col gap-3 py-5">
+            <li v-for="node in section.nodes" :id="`node-${node.key}`" :key="node.key">
+              <!-- Done: a card in the unit's colour, with the score; tap it to retry -->
+              <button
+                v-if="node.state === 'done' && node.lessonId"
+                :class="[
+                  'flex flex-col w-full items-center justify-between gap-3 rounded-2xl border-2 border-(--unit) bg-white px-4 py-4 text-left text-(--unit-dark) hover:bg-ink-50',
+                ]"
+                :aria-label="doneLabel(node)"
+                @click="emit('play', node.lessonId)"
+              >
+                <span class="flex w-full min-w-0">
+                  <span class="text-lg font-extrabold">{{ node.title }}</span>
                 </span>
-                <span
-                  v-if="node.state === 'current'"
-                  class="absolute -inset-2 animate-ping rounded-full border-4 border-leaf-300 [animation-duration:2s]"
-                  aria-hidden="true"
-                />
-                <button
-                  :class="[
-                    'relative flex items-center justify-center rounded-full shadow-[0_6px_0_var(--edge)] transition-[transform,box-shadow] duration-75 active:translate-y-1.5 active:shadow-none',
-                    node.state === 'current' ? 'size-20' : 'size-17',
-                    nodeLook(node),
-                  ]"
-                  :aria-label="nodeLabel(node)"
-                  :aria-expanded="selected === node.key"
-                  @click.stop="toggle(node.key)"
-                >
-                  <Icon
-                    :name="
-                      node.state === 'locked' ? 'lock' : node.state === 'done' ? 'check' : 'star'
-                    "
-                    :size="node.state === 'current' ? 36 : 30"
-                  />
-                </button>
+                <span class="flex justify-between w-full">
+                  <span class="flex items-center gap-1 text-sm text-(--unit)">
+                    {{ node.correct }} of {{ node.questions }} right
+                    <Icon
+                      v-if="node.correct === node.questions"
+                      name="star"
+                      :size="16"
+                      class="text-sun-500 ml-1"
+                    />
+                  </span>
+                  <span
+                    class="flex shrink-0 items-center gap-1 text-sm font-extrabold tracking-wide uppercase"
+                  >
+                    <Icon name="retry" :size="16" weight="bold" />
+                  </span>
+                </span>
+              </button>
+
+              <!-- Up next: START in the unit's colour -->
+              <div
+                v-else-if="node.state === 'current' && node.lessonId"
+                class="flex flex-col gap-3 rounded-2xl border-2 border-ink-200 bg-white p-4"
+              >
+                <p class="text-lg font-extrabold">{{ node.title }}</p>
+                <PupilButton variant="unit" block @click="emit('play', node.lessonId!)">
+                  Start
+                </PupilButton>
               </div>
 
-              <!-- The node's card -->
-              <div
-                v-if="selected === node.key"
-                class="absolute top-full z-20 mt-4 flex w-72 flex-col gap-3 rounded-2xl border-2 border-ink-200 bg-white p-4 shadow-lg"
-                @click.stop
+              <!-- Written ahead, not next: tap it to take it early -->
+              <button
+                v-else-if="node.lessonId"
+                class="flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink-200 bg-white px-4 py-4 text-left hover:bg-ink-50"
+                @click="emit('play', node.lessonId)"
               >
-                <template v-if="node.lessonId">
-                  <p class="text-lg font-extrabold">{{ node.title }}</p>
-                  <p v-if="node.state === 'done'" class="text-ink-600">
-                    Your score: {{ node.correct }} of {{ node.questions }}
-                  </p>
-                  <p v-else-if="node.state === 'ready'" class="text-ink-600">
-                    Written and ready for you.
-                  </p>
-                  <PupilButton
-                    block
-                    :variant="node.state === 'done' ? 'secondary' : 'primary'"
-                    @click="emit('play', node.lessonId)"
-                  >
-                    {{ node.state === 'done' ? 'Review' : 'Start' }}
-                  </PupilButton>
-                </template>
-                <template v-else-if="node.here && next?.kind === 'waiting'">
-                  <p class="font-extrabold">Being written…</p>
-                  <p class="text-ink-600">{{ WAITING[next.job] }}</p>
-                </template>
+                <span class="min-w-0 text-lg font-extrabold">{{ node.title }}</span>
+                <span class="shrink-0 text-sm text-ink-400">Ready</span>
+              </button>
+
+              <!-- Not written yet: being written, stuck, or still to come -->
+              <div
+                v-else
+                class="flex flex-col gap-3 rounded-2xl border-2 border-ink-200 bg-ink-100 px-4 py-4 text-ink-500"
+              >
+                <p
+                  v-if="node.here && next?.kind === 'waiting'"
+                  class="animate-pulse font-extrabold"
+                >
+                  {{ WAITING[next.job] }}
+                </p>
                 <template v-else-if="node.here && next?.kind === 'stuck'">
-                  <p class="font-extrabold text-coral-600">Something went wrong</p>
-                  <p v-if="next.error" class="text-ink-600">{{ next.error }}</p>
-                  <PupilButton block :disabled="busy" @click="ask(prepareTopic)">
+                  <p class="font-extrabold text-coral-600">
+                    Something went wrong<span v-if="next.error">: {{ next.error }}</span>
+                  </p>
+                  <PupilButton variant="unit" block :disabled="busy" @click="ask(prepareTopic)">
                     Try again
                   </PupilButton>
                 </template>
-                <template v-else>
-                  <p class="font-extrabold">Still to come</p>
-                  <p class="text-ink-600">Pupil writes it once you reach it.</p>
-                </template>
+                <p v-else class="flex items-center gap-2 font-extrabold">
+                  <Icon name="lock" :size="18" />
+                  Still to come
+                </p>
               </div>
             </li>
           </ol>
@@ -370,10 +368,8 @@ function nodeLabel(n: PathNode): string {
           </span>
           <button
             :class="[
-              'flex size-20 items-center justify-center rounded-full shadow-[0_6px_0_var(--edge)] transition-[transform,box-shadow] duration-75 active:translate-y-1.5 active:shadow-none',
-              topic.finished
-                ? 'bg-sun-400 text-white [--edge:var(--color-sun-600)]'
-                : 'bg-ink-200 text-ink-400 [--edge:var(--color-ink-300)]',
+              'flex size-20 items-center justify-center rounded-full',
+              topic.finished ? 'bg-sun-400 text-white' : 'bg-ink-200 text-ink-400',
             ]"
             :aria-label="topic.finished ? 'Finished! Go further' : 'The end of the path'"
             :aria-expanded="selected === 'trophy'"
@@ -389,7 +385,9 @@ function nodeLabel(n: PathNode): string {
             <template v-if="next?.kind === 'done'">
               <p class="text-lg font-extrabold">Want to keep going?</p>
               <p class="text-ink-600">Pupil can add units that go deeper, picking up from here.</p>
-              <PupilButton block :disabled="busy" @click="ask(extendTopic)">Go further</PupilButton>
+              <PupilButton variant="success" block :disabled="busy" @click="ask(extendTopic)">
+                Go further
+              </PupilButton>
             </template>
             <template v-else-if="next?.kind === 'waiting' && hereKey === 'trophy'">
               <p class="font-extrabold">{{ WAITING[next.job] }}</p>
@@ -411,7 +409,7 @@ function nodeLabel(n: PathNode): string {
     >
       <div class="mx-auto flex max-w-md flex-col gap-3">
         <template v-if="next.kind === 'ready'">
-          <PupilButton block @click="emit('play', next.lessonId)">
+          <PupilButton variant="success" block @click="emit('play', next.lessonId)">
             {{ current === 'plan' ? 'Start your first lesson' : 'Start' }}
           </PupilButton>
         </template>
@@ -422,7 +420,9 @@ function nodeLabel(n: PathNode): string {
           <p class="text-coral-600">
             Something went wrong preparing this<span v-if="next.error">: {{ next.error }}</span>
           </p>
-          <PupilButton block :disabled="busy" @click="ask(prepareTopic)">Try again</PupilButton>
+          <PupilButton variant="success" block :disabled="busy" @click="ask(prepareTopic)">
+            Try again
+          </PupilButton>
         </template>
       </div>
     </footer>

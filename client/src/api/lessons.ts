@@ -70,13 +70,7 @@ export interface Matching extends QuestionBase {
 }
 
 export type Question =
-  | MultipleChoice
-  | TrueFalse
-  | Numeric
-  | TextMatch
-  | FillBlank
-  | Ordering
-  | Matching
+  MultipleChoice | TrueFalse | Numeric | TextMatch | FillBlank | Ordering | Matching
 
 /** Where a blank goes in a fill_blank question's text. */
 export const BLANK = /_{3,}/

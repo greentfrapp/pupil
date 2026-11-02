@@ -10,7 +10,7 @@ import {
   type LessonResponse,
   type Question,
 } from '../api/lessons'
-import { answerText, feedbackFor, grade, responseText } from '../grading'
+import { answerParts, answerText, feedbackFor, grade, responseText } from '../grading'
 import { lessonStats } from '../lessonStats'
 import { renderInline, renderMarkdown } from '../markdown'
 import ChoiceInput from './inputs/ChoiceInput.vue'
@@ -65,15 +65,11 @@ const feedback = computed(() => {
   const q = question.value
   const answer = q && answers.value[q.id]
   if (finished.value || !q || !answer) return null
-  const title = answer.correct
-    ? praise.value
-    : answer.response
-      ? 'Not quite'
-      : "Here's the answer" // the learner said they didn't know
+  const title = answer.correct ? praise.value : answer.response ? 'Not quite' : "Here's the answer" // the learner said they didn't know
   return {
     correct: answer.correct,
     title,
-    answer: answerText(q),
+    answer: answerParts(q),
     explanation: q.explanation,
   }
 })
@@ -254,13 +250,17 @@ const footerStyle = computed(() => {
                 v-for="(c, i) in CONFETTI"
                 :key="i"
                 :class="['confetti absolute top-0 h-3 w-2 rounded-sm', c.color]"
-                :style="{ left: `${c.left}%`, animationDelay: `${c.delay}s`, rotate: `${c.turn}deg` }"
+                :style="{
+                  left: `${c.left}%`,
+                  animationDelay: `${c.delay}s`,
+                  rotate: `${c.turn}deg`,
+                }"
               />
             </div>
 
             <div class="flex flex-col items-center gap-4 pt-6 text-center">
               <span
-                class="pop flex size-24 items-center justify-center rounded-full bg-sun-400 text-white shadow-[0_6px_0_var(--color-sun-600)]"
+                class="pop flex size-24 items-center justify-center rounded-full bg-sun-400 text-white"
               >
                 <Icon name="trophy" :size="52" />
               </span>
@@ -275,14 +275,28 @@ const footerStyle = computed(() => {
             <div class="grid grid-cols-3 gap-3">
               <div
                 v-for="s in [
-                  { label: 'Accuracy', value: `${stats.accuracy}%`, look: 'border-leaf-500 bg-leaf-500 text-leaf-600' },
-                  { label: 'Time', value: stats.time, look: 'border-lake-500 bg-lake-500 text-lake-600' },
-                  { label: 'Right', value: `${stats.correct}/${stats.total}`, look: 'border-sun-400 bg-sun-400 text-sun-600' },
+                  {
+                    label: 'Accuracy',
+                    value: `${stats.accuracy}%`,
+                    look: 'border-leaf-500 bg-leaf-500 text-leaf-600',
+                  },
+                  {
+                    label: 'Time',
+                    value: stats.time,
+                    look: 'border-lake-500 bg-lake-500 text-lake-600',
+                  },
+                  {
+                    label: 'Right',
+                    value: `${stats.correct}/${stats.total}`,
+                    look: 'border-sun-400 bg-sun-400 text-sun-600',
+                  },
                 ]"
                 :key="s.label"
                 :class="['pop overflow-hidden rounded-2xl border-2', s.look]"
               >
-                <p class="py-1 text-center text-xs font-extrabold tracking-wide text-white uppercase">
+                <p
+                  class="py-1 text-center text-xs font-extrabold tracking-wide text-white uppercase"
+                >
                   {{ s.label }}
                 </p>
                 <p class="rounded-xl bg-white py-3 text-center text-xl font-black">
@@ -322,16 +336,14 @@ const footerStyle = computed(() => {
 
           <!-- A teach card -->
           <template v-else-if="item && item.kind === 'teach_card'">
-            <div
-              class="flex flex-col gap-4 rounded-2xl border-2 border-lake-200 bg-lake-50 p-5 shadow-[0_4px_0_var(--color-lake-200)]"
-            >
+            <div class="flex flex-col gap-4 rounded-2xl border-3 border-sun-400 p-5 text-ink-900">
               <div class="flex items-center gap-3">
                 <span
-                  class="flex size-11 items-center justify-center rounded-xl bg-lake-500 text-white shadow-[0_3px_0_var(--color-lake-700)]"
+                  class="flex size-11 items-center justify-center rounded-xl bg-white text-sun-600"
                 >
                   <Icon name="book" />
                 </span>
-                <p class="text-sm font-extrabold tracking-wide text-lake-600 uppercase">New idea</p>
+                <p class="text-sm font-extrabold tracking-wide text-sun-900 uppercase">New idea</p>
               </div>
               <h2 class="text-2xl font-extrabold">{{ item.title }}</h2>
               <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />
@@ -395,10 +407,7 @@ const footerStyle = computed(() => {
       </Transition>
     </main>
 
-    <footer
-      v-if="lesson && !taken"
-      :class="['safe-bottom px-4 pt-5', footerStyle]"
-    >
+    <footer v-if="lesson && !taken" :class="['safe-bottom px-4 pt-5', footerStyle]">
       <div class="mx-auto flex max-w-md flex-col gap-3">
         <div v-if="feedback" class="flex gap-4">
           <span
@@ -418,9 +427,17 @@ const footerStyle = computed(() => {
             <p class="text-2xl font-extrabold">{{ feedback.title }}</p>
             <template v-if="!feedback.correct">
               <p class="font-extrabold">Correct answer:</p>
-              <p>{{ feedback.answer }}</p>
+              <p>
+                <template v-for="(part, i) in feedback.answer" :key="i">
+                  <strong v-if="part.filled" class="font-black">{{ part.text }}</strong>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </p>
             </template>
-            <div class="markdown mt-1 font-semibold" v-html="renderMarkdown(feedback.explanation)" />
+            <div
+              class="markdown mt-1 font-semibold"
+              v-html="renderMarkdown(feedback.explanation)"
+            />
           </div>
         </div>
         <template v-if="finished">
@@ -428,7 +445,9 @@ const footerStyle = computed(() => {
           <p v-else-if="saveProblem" class="text-coral-600">{{ saveProblem.message }}</p>
           <div class="flex flex-col gap-3">
             <!-- Not while saving: the topic would still show this lesson as the next one -->
-            <PupilButton block :disabled="busy" @click="emit('close')">Continue</PupilButton>
+            <PupilButton variant="success" block :disabled="busy" @click="emit('close')">
+              Continue
+            </PupilButton>
             <PupilButton
               v-if="saveProblem?.canRetry"
               variant="secondary"
@@ -458,12 +477,14 @@ const footerStyle = computed(() => {
           >
             I don't know
           </PupilButton>
-          <PupilButton :disabled="!response" class="flex-1" @click="check">Check</PupilButton>
+          <PupilButton variant="success" :disabled="!response" class="flex-1" @click="check">
+            Check
+          </PupilButton>
         </div>
         <PupilButton
           v-else
           block
-          :variant="feedback && !feedback.correct ? 'danger' : 'primary'"
+          :variant="feedback && !feedback.correct ? 'danger' : 'success'"
           @click="next"
         >
           {{ !question ? 'Got it' : isLast ? 'Finish' : feedback?.correct ? 'Continue' : 'Got it' }}

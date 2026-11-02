@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { LessonResponse, Ordering } from '../../api/lessons'
 import { outOfOrder } from '../../shuffle'
 import type { Mark } from '../../grading'
@@ -27,12 +27,22 @@ function toggle(id: string) {
 }
 
 const text = (id: string) => pool.find((o) => o.id === id)?.text
+
+/** Whether, once checked, any place is wrong or the learner didn't know, so the order is shown. */
+const showOrder = computed(
+  () => !!props.marks && Object.values(props.marks).some((m) => m !== 'right'),
+)
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
-    <p class="text-sm text-ink-500">Tap the items in order. Tap one again to take it back.</p>
-    <ol class="flex min-h-14 flex-col gap-2 rounded-xl border-2 border-dashed border-ink-200 p-2">
+    <p v-if="!marks" class="text-sm text-ink-500">
+      Tap the items in order. Tap one again to take it back.
+    </p>
+    <ol
+      v-if="!marks || placed.length"
+      class="flex min-h-14 flex-col gap-2 rounded-xl border-2 border-dashed border-ink-200 p-2"
+    >
       <li v-for="(id, i) in placed" :key="id">
         <button
           :disabled="disabled"
@@ -43,7 +53,7 @@ const text = (id: string) => pool.find((o) => o.id === id)?.text
         </button>
       </li>
     </ol>
-    <div class="flex flex-wrap gap-2">
+    <div v-if="!marks" class="flex flex-wrap gap-2">
       <button
         v-for="o in pool"
         :key="o.id"
@@ -53,6 +63,17 @@ const text = (id: string) => pool.find((o) => o.id === id)?.text
       >
         {{ o.text }}
       </button>
+    </div>
+    <!-- Once checked, the right order, unless the learner had it -->
+    <div v-if="showOrder" class="flex flex-col gap-2">
+      <p class="text-sm font-extrabold tracking-wide text-leaf-700 uppercase">Correct order</p>
+      <ol class="flex flex-col gap-2">
+        <li v-for="(o, i) in question.sequence" :key="o.id">
+          <span :class="[tileClass(false, 'missed'), 'flex w-full items-center']">
+            <span class="mr-2 text-ink-400">{{ i + 1 }}.</span>{{ o.text }}
+          </span>
+        </li>
+      </ol>
     </div>
   </div>
 </template>

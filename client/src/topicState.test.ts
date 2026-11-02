@@ -89,7 +89,13 @@ describe('nextUp', () => {
 
 describe('pathSections', () => {
   function taken(id: string, correct: number): LessonSummary {
-    return { ...lesson('lesson', 1), lesson_id: id, title: id, questions: 5, latest_correct: correct }
+    return {
+      ...lesson('lesson', 1),
+      lesson_id: id,
+      title: id,
+      questions: 5,
+      latest_correct: correct,
+    }
   }
   function untaken(id: string): LessonSummary {
     return { ...lesson('lesson', 0), lesson_id: id, title: id, questions: 5 }

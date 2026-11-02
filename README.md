@@ -17,6 +17,7 @@ The agent writes your next lesson in the background while you take the current o
 ## Run it
 
 You need:
+
 - [Node.js](https://nodejs.org) 20.19+ and [pnpm](https://pnpm.io) 10
 - [uv](https://docs.astral.sh/uv/) (it fetches the right Python for you)
 - Claude Code or Codex, signed in with a valid subscription. Pupil uses Claude unless
@@ -38,15 +39,15 @@ Then open http://127.0.0.1:8787.
 Copy [`.env.example`](.env.example) to `.env` in the repo's root and change what you
 need there; environment variables work too, and take precedence.
 
-| Variable | Default | |
-|---|---|---|
-| `PUPIL_PORT` | `8787` | Where `pnpm start` serves |
-| `PUPIL_HOST` | `127.0.0.1` | Keep this local: Pupil has no login |
-| `PUPIL_DB_PATH` | `~/Pupil/pupil.db` | Where your topics and lessons are kept |
-| `PUPIL_AGENT_BACKEND` | `claude` | The agent that writes your lessons: `claude` or `codex`. `fake` runs without one, for development |
-| `PUPIL_MODEL` | `opus` for Claude, `gpt-6.1-sol` for Codex | The model the agent uses. For Claude, `sonnet` is cheaper but writes weaker lessons |
-| `PUPIL_EFFORT` | `medium` | How hard the model thinks: `low`, `medium`, `high`, `xhigh` or `max` |
-| `PUPIL_LOG_LEVEL` | `INFO` | |
+| Variable              | Default                                    |                                                                                                   |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `PUPIL_PORT`          | `8787`                                     | Where `pnpm start` serves                                                                         |
+| `PUPIL_HOST`          | `127.0.0.1`                                | Keep this local: Pupil has no login                                                               |
+| `PUPIL_DB_PATH`       | `~/Pupil/pupil.db`                         | Where your topics and lessons are kept                                                            |
+| `PUPIL_AGENT_BACKEND` | `claude`                                   | The agent that writes your lessons: `claude` or `codex`. `fake` runs without one, for development |
+| `PUPIL_MODEL`         | `opus` for Claude, `gpt-6.1-sol` for Codex | The model the agent uses. For Claude, `sonnet` is cheaper but writes weaker lessons               |
+| `PUPIL_EFFORT`        | `medium`                                   | How hard the model thinks: `low`, `medium`, `high`, `xhigh` or `max`                              |
+| `PUPIL_LOG_LEVEL`     | `INFO`                                     |                                                                                                   |
 
 ## License
 

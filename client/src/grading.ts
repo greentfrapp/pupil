@@ -14,8 +14,9 @@ export function grade(question: Question, response: LessonResponse): boolean {
     case 'true_false':
       return expect(question, response, 'bool').value === question.answer
     case 'numeric':
-      return Math.abs(expect(question, response, 'number').value - question.answer) <=
-        question.tolerance
+      return (
+        Math.abs(expect(question, response, 'number').value - question.answer) <= question.tolerance
+      )
     case 'text_match': {
       const given = expect(question, response, 'text').text
       return matches(given, question.accepted, question)
@@ -54,7 +55,8 @@ export type Mark = 'right' | 'wrong' | 'missed'
  * How each part of a checked answer did, for the input to show. Keyed by option id
  * (multiple_choice), 'true' or 'false' (true_false), blank index (fill_blank), position
  * (ordering), left-hand pair id (matching), or 'answer' (numeric, text_match). A null response
- * is the learner saying they didn't know: the right choices show as missed.
+ * is the learner saying they didn't know: the right choices, every blank, place and match, and a
+ * typed answer show as missed.
  */
 export function feedbackFor(
   question: Question,
@@ -81,28 +83,32 @@ export function feedbackFor(
     case 'fill_blank': {
       const values = response?.kind === 'blanks' ? response.values : []
       question.blanks.forEach((b, i) => {
-        if (values[i] !== undefined)
-          marks[i] = matches(values[i], b.accepted, question) ? 'right' : 'wrong'
+        if (!values[i]) marks[i] = 'missed'
+        else marks[i] = matches(values[i], b.accepted, question) ? 'right' : 'wrong'
       })
       return marks
     }
     case 'ordering': {
-      const ids = response?.kind === 'order' ? response.item_ids : []
-      ids.forEach((id, i) => {
+      if (response?.kind !== 'order') {
+        question.sequence.forEach((_, i) => (marks[i] = 'missed'))
+        return marks
+      }
+      response.item_ids.forEach((id, i) => {
         marks[i] = question.sequence[i]?.id === id ? 'right' : 'wrong'
       })
       return marks
     }
     case 'matching': {
       const given = response?.kind === 'matches' ? response.matches : {}
-      for (const [left, right] of Object.entries(given)) {
-        marks[left] = left === right ? 'right' : 'wrong'
+      for (const p of question.pairs) {
+        if (!(p.id in given)) marks[p.id] = 'missed'
+        else marks[p.id] = given[p.id] === p.id ? 'right' : 'wrong'
       }
       return marks
     }
     case 'numeric':
     case 'text_match':
-      if (!response) return marks
+      if (!response) return { answer: 'missed' }
       return { answer: grade(question, response) ? 'right' : 'wrong' }
   }
 }
@@ -125,16 +131,33 @@ export function answerText(question: Question): string {
     }
     case 'text_match':
       return question.accepted[0]
-    case 'fill_blank': {
-      let blank = 0
-      const fill = () => question.blanks[blank++].accepted[0]
-      return question.text.replace(new RegExp(BLANK, 'g'), fill)
-    }
+    case 'fill_blank':
+      return answerParts(question)
+        .map((p) => p.text)
+        .join('')
     case 'ordering':
       return question.sequence.map((o) => o.text).join(' → ')
     case 'matching':
       return question.pairs.map((p) => `${p.left} → ${p.right}`).join('; ')
   }
+}
+
+export interface AnswerPart {
+  text: string
+  /** Whether this part fills a blank, so it can stand out. */
+  filled: boolean
+}
+
+/** The correct answer in parts: a fill_blank's text with each blank filled, or else one part. */
+export function answerParts(question: Question): AnswerPart[] {
+  if (question.kind !== 'fill_blank') return [{ text: answerText(question), filled: false }]
+  const parts: AnswerPart[] = []
+  question.text.split(BLANK).forEach((piece, i) => {
+    if (piece) parts.push({ text: piece, filled: false })
+    const blank = question.blanks[i]
+    if (blank) parts.push({ text: blank.accepted[0], filled: true })
+  })
+  return parts
 }
 
 /** What the learner answered, in words. */

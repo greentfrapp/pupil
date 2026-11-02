@@ -8,16 +8,19 @@ feedback) but none of Duolingo's assets: no owl, font, brand colours or sounds. 
 gamification yet. Three branches, in order:
 
 **`ui-foundation`**
+
 - [x] Design tokens: Pupil's own bright palette, large radii, an off-white background, and the Nunito font bundled locally.
 - [x] Shared components: 3D buttons, pressable choice tiles, a thick progress bar, and a small set of SVG icons.
 - [x] Home and intake restyled, in a phone-width column centred on desktop.
 
 **`ui-path`**
+
 - [x] The topic page as a winding path of round lesson nodes under coloured unit banners: done, current (with a START bubble), ready and locked.
 - [x] Tapping a node shows its title and score with Start or Review; the path ends in a trophy that opens Go further.
 - [x] Waiting and failed runs show at the current node.
 
 **`ui-lesson`**
+
 - [x] After Check, the tiles show the right and wrong answers.
 - [x] Bold green and red feedback panels, motion between questions, and a shake on a wrong answer. (Sound effects left out for now.)
 - [x] A lesson-complete screen with accuracy, time and questions, and the answers to review.
@@ -31,10 +34,12 @@ gamification yet. Three branches, in order:
 ## Possible extensions
 
 ### Steering
+
 - **After each lesson:** "Too easy / About right / Too hard", plus optional chips ("More examples", "More real-world"), saved to the topic's profile and given in the next brief.
 - **Syllabus proposals:** a `propose_revision` tool whose change is shown as a card ("Add a unit on window functions?"); accepting applies it through the existing revision checks. The learner can also ask for more on a unit, or to skip one.
 
 ### Review
+
 - Mastery per objective, computed from evidence and shown on the path, deciding how much retries count compared with first attempts.
 - Review lessons that bring back weak or due objectives, by spaced repetition.
 

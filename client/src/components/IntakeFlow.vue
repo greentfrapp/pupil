@@ -136,6 +136,7 @@ async function start() {
       <div class="mx-auto max-w-md">
         <PupilButton
           v-if="current === 'request'"
+          variant="success"
           type="submit"
           form="intake-step"
           block
@@ -143,7 +144,14 @@ async function start() {
         >
           Continue
         </PupilButton>
-        <PupilButton v-else type="submit" form="intake-step" block :disabled="busy">
+        <PupilButton
+          v-else
+          variant="success"
+          type="submit"
+          form="intake-step"
+          block
+          :disabled="busy"
+        >
           {{ busy ? 'Starting…' : specific.trim() ? 'Start learning' : 'Skip and start' }}
         </PupilButton>
       </div>

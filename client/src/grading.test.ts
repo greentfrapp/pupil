@@ -8,7 +8,7 @@ import type {
   TextMatch,
   TrueFalse,
 } from './api/lessons'
-import { answerText, feedbackFor, grade, responseText } from './grading'
+import { answerParts, answerText, feedbackFor, grade, responseText } from './grading'
 
 const basics = { prompt: 'p', objective_ids: [], difficulty: 1, explanation: 'Because.' }
 
@@ -205,8 +205,9 @@ describe('responseText', () => {
   it('names what was picked, not its ids', () => {
     expect(responseText(choice(['a']), picks('c', 'a'))).toBe('C, A')
     expect(responseText(ordering('boil', 'pour'), order('1', '0'))).toBe('pour → boil')
-    expect(responseText(matching(['cat', 'chat'], ['dog', 'chien']), matched({ 0: '1', 1: '0' })))
-      .toBe('cat → chien; dog → chat')
+    expect(
+      responseText(matching(['cat', 'chat'], ['dog', 'chien']), matched({ 0: '1', 1: '0' })),
+    ).toBe('cat → chien; dog → chat')
   })
 
   it('gives typed answers as typed', () => {
@@ -244,6 +245,23 @@ describe('answerText', () => {
   })
 })
 
+describe('answerParts', () => {
+  it('splits a filled-in sentence so the answers stand out', () => {
+    const q = fillBlank('for ___ in ______(3):', [['i', 'x'], ['range']])
+    expect(answerParts(q)).toEqual([
+      { text: 'for ', filled: false },
+      { text: 'i', filled: true },
+      { text: ' in ', filled: false },
+      { text: 'range', filled: true },
+      { text: '(3):', filled: false },
+    ])
+  })
+
+  it('gives any other answer as one part', () => {
+    expect(answerParts(trueFalse(true))).toEqual([{ text: 'True', filled: false }])
+  })
+})
+
 describe('feedbackFor', () => {
   it('marks picked choices right or wrong, and right ones not picked as missed', () => {
     expect(feedbackFor(choice(['a']), picks('a'))).toEqual({ a: 'right' })
@@ -266,12 +284,22 @@ describe('feedbackFor', () => {
   it('shows the right answer as missed when the learner did not know', () => {
     expect(feedbackFor(choice(['b']), null)).toEqual({ b: 'missed' })
     expect(feedbackFor(trueFalse(false), null)).toEqual({ false: 'missed' })
-    expect(feedbackFor(textMatch(['Vimes']), null)).toEqual({})
+    expect(feedbackFor(textMatch(['Vimes']), null)).toEqual({ answer: 'missed' })
+    expect(feedbackFor(ordering('boil', 'pour'), null)).toEqual({ 0: 'missed', 1: 'missed' })
+    expect(feedbackFor(matching(['cat', 'chat'], ['dog', 'chien']), null)).toEqual({
+      0: 'missed',
+      1: 'missed',
+    })
   })
 
   it('marks each blank, graded as the question is', () => {
     const q = fillBlank('___ and ___', [['Vimes'], ['Carrot']])
     expect(feedbackFor(q, blanks('vimes', 'Angua'))).toEqual({ 0: 'right', 1: 'wrong' })
+  })
+
+  it('shows every blank as missed when the learner did not know', () => {
+    const q = fillBlank('___ and ___', [['Vimes'], ['Carrot']])
+    expect(feedbackFor(q, null)).toEqual({ 0: 'missed', 1: 'missed' })
   })
 
   it('marks each place in an ordering', () => {
