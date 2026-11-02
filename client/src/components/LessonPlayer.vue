@@ -260,7 +260,7 @@ const footerStyle = computed(() => {
 
             <div class="flex flex-col items-center gap-4 pt-6 text-center">
               <span
-                class="pop flex size-24 items-center justify-center rounded-full bg-sun-400 text-white shadow-[0_6px_0_var(--color-sun-600)]"
+                class="pop flex size-24 items-center justify-center rounded-full bg-sun-400 text-white"
               >
                 <Icon name="trophy" :size="52" />
               </span>
@@ -336,16 +336,14 @@ const footerStyle = computed(() => {
 
           <!-- A teach card -->
           <template v-else-if="item && item.kind === 'teach_card'">
-            <div
-              class="flex flex-col gap-4 rounded-2xl border-2 border-lake-200 bg-lake-50 p-5 shadow-[0_4px_0_var(--color-lake-200)]"
-            >
+            <div class="flex flex-col gap-4 rounded-2xl border-3 border-sun-400 p-5 text-ink-900">
               <div class="flex items-center gap-3">
                 <span
-                  class="flex size-11 items-center justify-center rounded-xl bg-lake-500 text-white shadow-[0_3px_0_var(--color-lake-700)]"
+                  class="flex size-11 items-center justify-center rounded-xl bg-white text-sun-600"
                 >
                   <Icon name="book" />
                 </span>
-                <p class="text-sm font-extrabold tracking-wide text-lake-600 uppercase">New idea</p>
+                <p class="text-sm font-extrabold tracking-wide text-sun-900 uppercase">New idea</p>
               </div>
               <h2 class="text-2xl font-extrabold">{{ item.title }}</h2>
               <div class="markdown text-lg" v-html="renderMarkdown(item.text)" />

@@ -99,7 +99,7 @@ const rightText = (id: string) => rights.find((p) => p.id === id)?.right
           :class="[tileClass(selected === p.id, marks?.[p.id]), 'text-left']"
           @click="pickLeft(p.id)"
         >
-          <span v-if="badge(p.id)" class="mr-2 font-semibold text-lake-600">{{ badge(p.id) }}</span>
+          <span v-if="badge(p.id)" class="mr-2 font-semibold text-sun-700">{{ badge(p.id) }}</span>
           {{ p.left }}
         </button>
       </div>
@@ -111,7 +111,7 @@ const rightText = (id: string) => rights.find((p) => p.id === id)?.right
           :class="[tileClass(false, rightMark(p.id)), 'text-left']"
           @click="pickRight(p.id)"
         >
-          <span v-if="rightBadge(p.id)" class="mr-2 font-semibold text-lake-600">
+          <span v-if="rightBadge(p.id)" class="mr-2 font-semibold text-sun-700">
             {{ rightBadge(p.id) }}
           </span>
           {{ p.right }}

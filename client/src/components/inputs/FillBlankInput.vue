@@ -80,7 +80,7 @@ function clear(blank: number) {
             v-model="typed[i]"
             :disabled="disabled"
             :class="[
-              'mx-1 w-28 rounded-lg border-2 px-2 align-baseline focus:border-lake-500 focus:outline-none',
+              'mx-1 w-28 rounded-lg border-2 px-2 align-baseline focus:border-sun-400 focus:outline-none',
               blankLook(i),
             ]"
             @input="update"

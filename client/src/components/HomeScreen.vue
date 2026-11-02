@@ -63,7 +63,7 @@ function percent(topic: Topic): number {
           >
             <div
               v-if="topic.finished"
-              class="flex size-14 shrink-0 items-center justify-center rounded-full bg-sun-400 text-white shadow-[0_4px_0_var(--color-sun-600)]"
+              class="flex size-14 shrink-0 items-center justify-center rounded-full bg-sun-400 text-white"
             >
               <Icon name="trophy" :size="28" label="Finished" />
             </div>
