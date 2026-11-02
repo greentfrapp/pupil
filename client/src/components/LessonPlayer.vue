@@ -10,7 +10,7 @@ import {
   type LessonResponse,
   type Question,
 } from '../api/lessons'
-import { answerText, feedbackFor, grade, responseText } from '../grading'
+import { answerParts, answerText, feedbackFor, grade, responseText } from '../grading'
 import { lessonStats } from '../lessonStats'
 import { renderInline, renderMarkdown } from '../markdown'
 import ChoiceInput from './inputs/ChoiceInput.vue'
@@ -69,7 +69,7 @@ const feedback = computed(() => {
   return {
     correct: answer.correct,
     title,
-    answer: answerText(q),
+    answer: answerParts(q),
     explanation: q.explanation,
   }
 })
@@ -429,7 +429,12 @@ const footerStyle = computed(() => {
             <p class="text-2xl font-extrabold">{{ feedback.title }}</p>
             <template v-if="!feedback.correct">
               <p class="font-extrabold">Correct answer:</p>
-              <p>{{ feedback.answer }}</p>
+              <p>
+                <template v-for="(part, i) in feedback.answer" :key="i">
+                  <strong v-if="part.filled" class="font-black">{{ part.text }}</strong>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </p>
             </template>
             <div
               class="markdown mt-1 font-semibold"

@@ -46,6 +46,12 @@ function blankLook(blank: number): string {
   return props.question.word_bank ? 'border-ink-400' : 'border-ink-200'
 }
 
+/** Whether a checked blank needs its right answer shown beside it, or in its place. */
+function corrected(blank: number): boolean {
+  const mark = props.marks?.[blank]
+  return mark === 'wrong' || mark === 'missed'
+}
+
 function clear(blank: number) {
   placed.value[blank] = null
   update()
@@ -57,7 +63,7 @@ function clear(blank: number) {
     <p class="font-mono text-lg leading-loose whitespace-pre-wrap">
       <template v-for="(piece, i) in pieces" :key="i">
         <span>{{ piece }}</span>
-        <template v-if="i < question.blanks.length">
+        <template v-if="i < question.blanks.length && marks?.[i] !== 'missed'">
           <button
             v-if="question.word_bank"
             :disabled="disabled || placed[i] === null"
@@ -80,6 +86,13 @@ function clear(blank: number) {
             @input="update"
           />
         </template>
+        <!-- The right answer, beside a wrong one or in place of a missed one -->
+        <span
+          v-if="i < question.blanks.length && corrected(i)"
+          class="mx-1 inline-block rounded-lg border-2 border-dashed border-leaf-400 bg-white px-2 align-baseline text-leaf-700"
+        >
+          <span class="sr-only">Correct answer: </span>{{ question.blanks[i].accepted[0] }}
+        </span>
       </template>
     </p>
     <div v-if="question.word_bank" class="flex flex-wrap gap-2">

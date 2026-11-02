@@ -62,10 +62,33 @@ function rightBadge(rightId: string): number | null {
   const left = Object.keys(matched.value).find((l) => matched.value[l] === rightId)
   return left === undefined ? null : badge(left)
 }
+
+const rightText = (id: string) => rights.find((p) => p.id === id)?.right
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <!-- Once checked: a row per match the learner made, each wrong one followed by the right one -->
+  <div v-if="marks" class="flex flex-col gap-2">
+    <template v-for="p in lefts" :key="p.id">
+      <div v-if="marks[p.id] !== 'missed'" class="grid grid-cols-2 gap-2">
+        <span :class="[tileClass(false, marks[p.id]), 'flex items-center']">{{ p.left }}</span>
+        <span :class="[tileClass(false, marks[p.id]), 'flex items-center']">
+          {{ rightText(matched[p.id]) }}
+        </span>
+      </div>
+      <div
+        v-if="marks[p.id] === 'wrong' || marks[p.id] === 'missed'"
+        class="grid grid-cols-2 items-center gap-2"
+      >
+        <span class="flex items-center gap-1 pl-3 text-lg text-ink-500">
+          <span class="sr-only">Correct match: </span>{{ p.left }}
+        </span>
+        <span :class="[tileClass(false, 'missed'), 'flex items-center']">{{ p.right }}</span>
+      </div>
+    </template>
+  </div>
+
+  <div v-else class="flex flex-col gap-3">
     <p class="text-sm text-ink-500">Tap an item on the left, then its match on the right.</p>
     <div class="grid grid-cols-2 gap-2">
       <div class="flex flex-col gap-2">
